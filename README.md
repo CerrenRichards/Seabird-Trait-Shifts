@@ -1,8 +1,8 @@
 # Seabird-Trait-Shifts
-This repository contains the R code required to replicate the analyses in **Richards et al. "Bycatch mitigation could prevent significant shift in seabird traits across the globe"**.
+This repository contains the R code required to replicate the analyses in **Richards et al. "Bycatch mitigation could prevent strong changes in the ecological strategies of seabird communities across the globe"**.
 
 ## Scripts
-`Trait Shifts.Rmd` The R Markdown file that contains the code for the analysis.
+`Bycatch Trait Shifts.Rmd` The R Markdown file that contains the code for the analysis.
 
 ## Data
 The imputed seabird trait data `Imputed Trait Data.csv` used for all analyses are available for download on Dryad: https://doi.org/10.5061/dryad.x69p8czhd. 
