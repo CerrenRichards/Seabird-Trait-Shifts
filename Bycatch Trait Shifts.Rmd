@@ -1,0 +1,1363 @@
+---
+title: "Supplementary Code"
+subtitle: "Bycatch mitigation could prevent strong changes in the ecological strategies of seabird communities across the globe"
+author: "Cerren Richards"
+date: '15-04-2021'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+
+library(rmarkdown)
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/Users/cerridwenr/Desktop/Bycatch Trait Shifts')
+
+```
+
+#___________________________________________________________________
+## Code Contents
+
+1. Preparing BirdLife International species distribution polygons  
+    * Import and subset the seabird polygons 
+    * Create a species presence-absence matrix (PAM)
+    * Remove the land from the PAM
+    
+2. Preparing the Global Fishing Watch data 
+    * Extract latitude and longitude for the fishing gears largely responsible for seabird bycatch
+    * Remove cells that are overlapping between fisheries and threatened species
+
+3. Importing species' threat data from the IUCN
+    * Subset species at risk to bycatch
+    
+4. Remove cells that are overlapping between fisheries and threatened species
+    * Create global map of fishing distribution
+    
+5. Calculate the community weighted mean (CWM) metric
+    * Observed CWM
+    * CWM after removing bycatch-threatened species
+    * Calculate the shift in CONTINUOUS traits
+    * Plotting the shift in CONTINUOUS traits with GAM and qGAM
+    * Calculate the shift in foraging guild (CATEGORICAL)
+    * Plot the shift in foraging guild (CATEGORICAL) with GAMM
+    * Calculate the shift in diet guild (CATEGORICAL)
+    * Plot the shift in diet guild (CATEGORICAL) with GAMM
+
+
+#___________________________________________________________________
+
+
+## **1. Preparing BirdLife International species distribution polygons**
+
+We downloaded the Bird of the World polygons from BirdLife International. These spatial polygons represent the coarse distributions that species likely occupy, and are presently the best available data for the ranges of all seabirds.
+
+Bird distribution data are available upon request from http://datazone.birdlife.org/species/requestdis/.
+
+### *Import and subset the seabird polygons* 
+
+Here we subset the seabird polygons based on the list of seabirds from Richards et al. (2021) - Biological traits of seabirds predict extinction risk and vulnerability to anthropogenic threats - https://doi.org/10.1111/geb.13279
+
+Imputed trait data are available for download from Dryad https://doi.org/10.5061/dryad.x69p8czhd. 
+
+
+```{r message=FALSE, error=FALSE, warning=FALSE}
+library(rgdal); library(dplyr)
+
+# Read in the Bird of the World (BOTW) data [this takes a long time]
+BOTW <- readOGR(dsn = "/Users/cerridwenr/Desktop/Masters Thesis /Chapter two/BOTW.gdb", layer = "All_Species")
+
+# Read in the trait and seabird data
+traits <- read.csv("Imputed_Trait_Data.csv")
+
+# Subset the BOTW dataset to only contain seabirds
+sb<- subset(BOTW, SCINAME %in% traits$Binomial)
+
+#save the SHAPE file as an RDS
+saveRDS(sb, "BOTW_seabirds_341.rds")
+
+```
+
+
+### *Create a species presence-absence matrix (PAM)*
+
+Here we further subset the seabird polygons to only retain the extant, native, resident, breeding season and non-breeding season polygons. 
+
+Second, we create a 1° resolution global presence-absence matrix based on the seabird distribution polygons.
+
+For more information on the codes used within the distribution polygons visit: http://datazone.birdlife.org/species/spcdistPOS
+
+
+```{r message=FALSE, error=FALSE, warning=FALSE}
+library(letsR)
+
+# .rds file that contains the subsetted seabird polygons from the large BOTW data file 
+sb <- readRDS("BOTW_seabirds_341.rds") # note this file has different binomials from the NEW_TRAITS file
+
+# Only keep the breeding season, non-breeding season and resident polygons
+# 1 = resident; 2 = breeding; 3 = non-breeding
+seabirds <- sb[sb$SEASONAL %in% c(1, 2, 3), ]
+
+# Only keep species that are extant
+# 1 = Extant 
+seabirds <- seabirds[seabirds$PRESENCE %in% c(1), ]
+
+# Only keep species that are native
+# 1 = Native
+seabirds <- seabirds[seabirds$ORIGIN %in% c(1), ]
+
+# Create PAM. This take ~30-40 minutes for 341 species
+# Returns latitude and longitude with PAM for each species 
+# Lat long values returned are the 1 degree cell's centroid
+PAM <- lets.presab(seabirds, resol = 1, xmn = -180, xmx = 180, ymn = -90, ymx = 90, count = TRUE)
+
+# Save PAM as a .rds file
+saveRDS(PAM, "Polygon_PAM.rds")
+
+```
+
+
+### *Remove the land from the PAM*
+
+We remove all land from the PAM because in analyses below we will be calculating ocean trait shifts, and the land obscures the pattern. 
+
+```{r}
+library(maptools); library(dplyr) 
+
+data(wrld_simpl) # Extract polygon of the world
+
+# This crops all cells from the ocean 
+PAM_crop <- lets.pamcrop(PAM, wrld_simpl, remove.sp = TRUE)
+
+# Plot to see
+plot(PAM_crop, xlab = "Longitude", ylab = "Latitude",
+     col = colorRampPalette(c("darkgreen", "yellow", "blue")))
+
+# Save the PAM for the land 
+PAM_crop_df <- as.data.frame(PAM_crop[["Presence_and_Absence_Matrix"]])
+
+# Save the complete PAM (land & ocean)
+PAM_df <- as.data.frame(PAM[["Presence_and_Absence_Matrix"]])
+
+# Remove the land data from the complete PAM_df
+PAM_ocean <-  anti_join(PAM_df, PAM_crop_df, by=c("Longitude(x)", "Latitude(y)"))
+
+# Check whether it has successfully removed the land
+plot(PAM_ocean$`Longitude(x)`, PAM_ocean$`Latitude(y)`)
+
+saveRDS(PAM_ocean, "PAM_ocean.rds")
+
+```
+
+
+
+## **2. Preparing the Global Fishing Watch data** 
+
+Here we use the 2015 - 2018 Global Fishing Watch data. These data were provided as the monthly sum of fishing hours per gear type per 1x1 degree cell. The data points are located in the southwestern corner of a respective cell. To centre the data within the cell, all points will need to be shifted by 0.5 degree North and East.
+
+Fishing effort is available for the time period 2012 to 2016 from https://globalfishingwatch.org/. To access to provisional 2017 and 2018 data, contact research@globalfishingwatch.org.
+
+### *Extract latitude and longitude for the fishing gears largely responsible for seabird bycatch*
+
+Longlines, trawlers, purse seines and gill nets are the fishing gears responsible for the majority of seabird bycatch. 
+
+In this section, we subset the Global Fishing Watch data to these four gears and remove any duplicate lat longs to produce a single map of the distribution for these gear types.
+
+The fishing effort .csv files are very large, so we read each year in individually and reduce the data to prevent R from crashing.
+
+```{r}
+### 2015 ###
+
+# read in the 2015 data 
+fish15 <- read.csv("MUN_fishing_effort_2015.csv")
+
+# Make the lat and long in the correct format
+fish15$lat_bin <- (fish15$lat_bin)/100
+fish15$lon_bin <- (fish15$lon_bin)/100
+
+# Shift the lat long to the center of cells
+fish15$lat_bin <- (fish15$lat_bin)+0.5
+fish15$lon_bin <- (fish15$lon_bin)+0.5
+
+# Subset the data to only the four gears largely responsible for seabird bycatch
+fish15 <- filter(fish15, geartype %in% c("drifting_longlines", "set_longlines",
+                                                "trawlers",
+                                                "other_purse_seines", "purse_seines", "tuna_purse_seines",
+                                                "set_gillnets"))
+
+# only keep distinct lat longs - remove duplicates
+fish15 <- distinct(fish15, lat_bin, lon_bin)
+
+saveRDS(fish15, "fish15.rds")
+
+# Clear the R environment 
+rm(list = ls())
+
+
+
+
+### 2016 ###
+
+
+# read in the 2016 data 
+fish16 <- read.csv("MUN_fishing_effort_2016.csv")
+
+# Make the lat and long in the correct format
+fish16$lat_bin <- (fish16$lat_bin)/100
+fish16$lon_bin <- (fish16$lon_bin)/100
+
+# Shift the lat long to the center of cells
+fish16$lat_bin <- (fish16$lat_bin)+0.5
+fish16$lon_bin <- (fish16$lon_bin)+0.5
+
+# Subset the data to only the four gears largely responsible for seabird bycatch
+fish16 <- filter(fish16, geartype %in% c("drifting_longlines", "set_longlines",
+                                         "trawlers",
+                                         "other_purse_seines", "purse_seines", "tuna_purse_seines",
+                                         "set_gillnets"))
+
+# only keep distinct lat longs - remove duplicates
+fish16 <- distinct(fish16, lat_bin, lon_bin)
+
+saveRDS(fish16, "fish16.rds")
+
+# Clear the R environment 
+rm(list = ls())
+
+
+
+
+
+### 2017 ###
+
+# read in the 2017 data 
+fish17 <- read.csv("MUN_fishing_effort_2017.csv")
+
+# Make the lat and long in the correct format
+fish17$lat_bin <- (fish17$lat_bin)/100
+fish17$lon_bin <- (fish17$lon_bin)/100
+
+# Shift the lat long to the center of cells
+fish17$lat_bin <- (fish17$lat_bin)+0.5
+fish17$lon_bin <- (fish17$lon_bin)+0.5
+
+
+# Subset the data to only the four gears largely responsible for seabird bycatch
+fish17 <- filter(fish17, geartype %in% c("drifting_longlines", "set_longlines",
+                                         "trawlers",
+                                         "other_purse_seines", "purse_seines", "tuna_purse_seines",
+                                         "set_gillnets"))
+
+# only keep distinct lat longs - remove duplicates
+fish17 <- distinct(fish17, lat_bin, lon_bin)
+
+saveRDS(fish17, "fish17.rds")
+
+# Clear the R environment 
+rm(list = ls())
+
+
+
+
+
+### 2018 ###
+
+
+# read in the 2018 data 
+fish18 <- read.csv("MUN_fishing_effort_2018.csv")
+
+# Make the lat and long in the correct format
+fish18$lat_bin <- (fish18$lat_bin)/100
+fish18$lon_bin <- (fish18$lon_bin)/100
+
+# Shift the lat long to the center of cells
+fish18$lat_bin <- (fish18$lat_bin)+0.5
+fish18$lon_bin <- (fish18$lon_bin)+0.5
+
+# Subset the data to only the four gears largely responsible for seabird bycatch
+fish18 <- filter(fish18, geartype %in% c("drifting_longlines", "set_longlines",
+                                         "trawlers",
+                                         "other_purse_seines", "purse_seines", "tuna_purse_seines",
+                                         "set_gillnets"))
+
+# only keep distinct lat longs - remove duplicates
+fish18 <- distinct(fish18, lat_bin, lon_bin)
+
+saveRDS(fish18, "fish18.rds")
+
+
+
+#### Join all of the fishing years together and remove duplicate lat longs if present
+fish18 <- readRDS("fish18.rds")
+fish15 <- readRDS("fish15.rds")
+
+
+tot_fish <- rbind(fish15, fish18)
+remove(fish15, fish18)
+tot_fish <- distinct(tot_fish, lat_bin, lon_bin)
+
+
+fish16<- readRDS("fish16.rds")
+tot_fish <- rbind(tot_fish, fish16)
+remove(fish16)
+tot_fish <-  distinct(tot_fish, lat_bin, lon_bin)
+
+
+fish17 <- readRDS("fish17.rds")
+tot_fish <- rbind(tot_fish, fish17)
+remove(fish17)
+tot_fish <-  distinct(tot_fish, lat_bin, lon_bin)
+
+
+# Save the final .rds that contains the lat and longs for the four gears largely responsible for seabird bycatch 
+saveRDS(tot_fish, "total_fish_distribution.rds")
+
+
+```
+
+
+
+
+## **3. Importing species' threat data from the IUCN**
+
+To identify which species are threatened from bycatch, we first must extract all the seabird threats from the IUCN Threat Classification Scheme: https://www.iucnredlist.org/resources/threat-classification-scheme. 
+
+IUCN Threat Data were downloaded on July 14th, 2020. Because threats are updated through time, they may change in the future.
+
+Note - an API key is needed to download the IUCN data. APIs can be requested from: https://apiv3.iucnredlist.org/api/v3/token
+
+```{r message=FALSE, error=FALSE, warning=FALSE, eval = FALSE}
+library(rredlist); library(rlist) # Load package
+
+spp <- as.character(traits$binomial) # vector of species names from the traits dataframe
+
+iucn_key <- " " # Enter your unique IUCN code here
+
+# Extract the threats for each species from th IUCN database. 
+# NOTE - this code take ~15 minutes to run.
+iucn <- lapply(spp, function(x) {
+  y <- rl_threats(name = x, key = iucn_key)
+  Sys.sleep(2)
+  # 2 second delay makes API work better - recommended by IUCN
+  return(y)
+})
+
+### Add an extra column to the dataframes in the list with the binomial names:
+for (i in 1:length(iucn)) { 
+  iucn[[i]][["result"]]$binomial <- iucn[[i]][["name"]] 
+}
+
+iucn <- Reduce(rbind, iucn) ## Reduce the lists down
+
+iucn[1:341] <- NULL # remove all of the extra species names in the list
+
+# Remove all lists with species with no threats
+iucn <- iucn[sapply(iucn, length)>1] 
+
+# binds all list elements by row to make a dataframe
+iucn <- list.rbind(iucn) 
+
+# Delete the columns that will not be used in further analyses
+iucn <- iucn[- c(3:7)] 
+```
+
+
+### *Subset species at risk to bycatch*
+
+Here we subset all the seabird species threatend from bycatch.
+
+IUCN Codes = https://www.iucnredlist.org/resources/threat-classification-scheme
+
+```{r, eval = FALSE}
+# Subset based on the IUCN codes indicating unintentional effects of fishing
+bycatch <- iucn[iucn$code %in% c("5.4.3", "5.4.4"), ]
+
+#remove duplicates
+bycatch <- bycatch[!duplicated(bycatch$binomial), ] 
+bycatch <- as.data.frame(bycatch$binomial); colnames(bycatch) <- "Species"
+bycatch$bycatch <- 1
+
+write.csv(bycatch, "BycatchThreatendSeabirds.csv")
+```
+
+
+## **4. Remove cells that are overlapping between fisheries and threatened species**
+
+Here we ensure that the seabird and vessel raster align by reprojecting them.
+
+We then remove any areas where seabirds and vessels overlap for later analyses.
+
+```{r}
+library(raster)
+
+vessels <- readRDS("total_fish_distribution.rds")
+birds <- readRDS("PAM_ocean.rds")
+threatened <- read.csv("BycatchThreatendSeabirds.csv")
+
+##### VESSEL DATA #####
+
+## Add a "z" column to the vessel data to run the `rasterFromXYZ()` code below
+vessels$z <- 1
+
+## Reorder the vessel columns to be in the order xyz
+vessels <- vessels %>% dplyr::select(lon_bin, lat_bin, z)
+
+
+# Note - the `vessels` file contains over 53 million data points
+# The following code takes a LONG time to run
+
+## Project fishing vessel and seabird distributions into rasters
+vesselRaster <- rasterFromXYZ(vessels)
+
+#lat and lon are in 0.1 units, so raster resolution is 0.01
+# we will reproject the raster to 1x1 degree
+vesselRaster <- aggregate(vesselRaster,fact=100,fun=max)
+vesselRaster 
+plot(vesselRaster)
+projection(vesselRaster) <- crs("+proj=longlat +datum=WGS84")
+res(vesselRaster)
+
+
+##### BIRD DATA #####
+
+## Add a column to indicate whether any threatened species is present
+birds$all <- apply(birds[,3:343],1,max) 
+
+#project bird data
+birdRaster <- rasterFromXYZ(birds[,c("Longitude(x)","Latitude(y)","all")])
+plot(birdRaster) 
+projection(birdRaster) <- crs("+proj=longlat +datum=WGS84")
+birdRaster 
+
+## Reproject the vessel layer into the same as the bird layer
+vesselRaster <- projectRaster(vesselRaster,birdRaster) 
+plot(vesselRaster)
+
+## make both a data frame and merge
+vesselDF <- as.data.frame(vesselRaster,xy=T)
+birdDF <- as.data.frame(birdRaster,xy=T)
+allDF <- left_join(birdDF,vesselDF)
+
+
+###### Joining the vessel data to the bird data ####
+
+## Filter only the species threatened from bycatch
+bycatch_birds <- birds %>% dplyr::select(`Longitude(x)`, `Latitude(y)`, threatened$binomial)
+
+# Rename the columns of `vesselDF` to match the `bycatch_birds` columns
+colnames(vesselDF) <- c("Longitude(x)", "Latitude(y)", "vessels")
+
+# Join the two datasets
+bycatch_birds <- left_join(bycatch_birds, vesselDF)
+
+# Replace NAs in the `vessels` column with zeros
+bycatch_birds$vessels[is.na(bycatch_birds$vessels)] <- 0
+
+## Remove locations where birds and vessels overlap
+## This is achieved through subtracting the vessel column (137) from all seabird columns (3:136)
+for(i in colnames(bycatch_birds[,3:136])) {
+  bycatch_birds[i] <- bycatch_birds[i] - bycatch_birds[137]
+}
+
+## Ensure all the values are rounded to 0 decimal places
+birdround <- round(bycatch_birds[3:136], digits = 0)
+
+## Any zero bird values have now been changed to `-1`. 
+## We will now replace all `-1` values with zero
+birdround[birdround == -1] <- 0
+
+## Add the latitude and longitude back into the dataframe because it was removed during the rounding
+## We will also add back the species that are not threatened from bycatch
+
+## Drop all of the threatened bird column
+birds_final <- dplyr::select(birds, -threatened$binomial)
+
+## bind the threatened birds with the non threatened bird data
+birds_final <- bind_cols(birds_final, birdround)
+
+## I WILL NEED TO REORDER THESE COLUMNS TO ALPHABETIC
+## https://stackoverflow.com/questions/29873293/dply-order-columns-alphabetically-in-r
+
+## Save the data
+saveRDS(birds_final, "PAM_No_Threatened_Overlap.rds")
+
+
+## Comparing the seabird rasters after the overlapping areas are removed
+full <- birds %>% dplyr::select(`Longitude(x)`, `Latitude(y)`, threatened$binomial)
+removed <- birds_final %>% dplyr::select(`Longitude(x)`, `Latitude(y)`, threatened$binomial)
+
+full$all <- apply(full[,3:136],1,max) 
+removed$all <- apply(removed[,3:136],1,max)
+
+# ORIGIONAL BIRD DATA
+fullraster <- rasterFromXYZ(full[,c("Longitude(x)","Latitude(y)","all")])
+plot(fullraster) 
+
+# OVERLAP REMOVED
+removedraster <- rasterFromXYZ(removed[,c("Longitude(x)","Latitude(y)","all")])
+plot(removedraster) 
+
+
+```
+
+### *Create global map of fishing distribution*
+
+Map the distributions of all four gears combined
+
+```{r}
+library(ggplot2);library(viridis); library(ggpubr); library(tidyverse); 
+library(sf);library("rnaturalearth"); library("rnaturalearthdata")
+
+# Extract only the cells that have fishing activity 
+vesselDF2 <- vesselDF %>% filter(vessels == 1)
+
+# Extract world polygon
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Plot
+ggplot() +
+  theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_tile(aes(x = x, y = y), fill = "darkturquoise", colour = "darkturquoise",data = vesselDF2) + 
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "none")+
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(),)+
+  geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ggsave("fishing_vessels.png")
+
+```
+
+
+
+## **5. Calculate the Community Weighted Mean (CWM) metric**
+### *Observed CWM*
+
+Run this with all the species present (n = 341). 
+
+```{r message=FALSE, error=FALSE, warning=FALSE}
+library(FD)
+
+PAM <- readRDS("PAM_ocean.rds")
+
+# Duplicate the dataframe because we will use the columns again
+PAM2 <- PAM
+
+#rownames(PAM) <- PAM$Locations
+PAM$`Longitude(x)` <- NULL
+PAM$`Latitude(y)` <- NULL
+PAM <- as.matrix(PAM)
+
+# Read in traits df and reformat it
+list.files()
+traits <- read.csv("Imputed Trait Data.csv")
+traits$Order <- NULL
+traits$Family <- NULL
+traits$family_english <- NULL
+traits$English <- NULL
+traits$IUCN <- NULL
+traits$Threat <- NULL
+
+#set up dataframe in correct layout
+rownames(traits) <- colnames(PAM)
+traits$binomial <- NULL
+
+# Keep only the traits to be used in the study
+traits$hab_breadth <- NULL
+traits$migrate <- NULL
+traits$pelagic_specialist <- NULL
+
+# Calculate the community weighted mean
+CWM_all <- functcomp(traits, PAM, CWM.type = "dom", bin.num = NULL) 
+
+# Rejoin the lat and long columns
+CWM_all$Lat <- PAM2$`Latitude(y)`
+CWM_all$Long <- PAM2$`Longitude(x)`
+
+```
+
+
+### *CWM after removing bycatch-threatened species* 
+
+Recalculate the CWM with the PAM that had overlap with fishing removed
+
+```{r}
+
+PAM_overlap <- readRDS("PAM_No_Threatened_Overlap.rds")
+PAM_overlap$all <- NULL
+
+# Reorder the columns of `PAM_overlap` to match the PAM2 column orders
+# this is important for caluclating the CWM because the orders of the species
+# must match the traits order
+PAM_overlap <- PAM_overlap[names(PAM2)]
+
+# Remove the lat and long columns because we need to sum the rows below
+PAM_overlap$`Longitude(x)` <- NULL
+PAM_overlap$`Latitude(y)` <- NULL
+
+# Some cells now have no species, so we must remove these before calculating the CWM
+# also need to make sure to rematch up the latlongs
+PAM_overlap$freq <- rowSums(PAM_overlap) 
+PAM_overlap$Long <- PAM2$`Longitude(x)`
+PAM_overlap$Lat <- PAM2$`Latitude(y)`
+PAM_overlap <- PAM_overlap %>% filter(freq != 0)
+PAM_overlap_nona <- PAM_overlap # for lat long reference
+
+PAM_overlap$freq <- NULL
+PAM_overlap$Lat <- NULL
+PAM_overlap$Long <- NULL
+
+# Turn `PAM_overlap` into a matrix
+PAM_overlap <- as.matrix(PAM_overlap)
+
+# Calculate the community weighted mean
+CWM_overlap <- functcomp(traits, PAM_overlap, CWM.type = "dom", bin.num = NULL)
+
+#add lat longs back
+CWM_overlap$Long <- PAM_overlap_nona$Long
+CWM_overlap$Lat <-  PAM_overlap_nona$Lat
+```
+
+
+
+### *Calculate the shift in CONTINUOUS traits*
+
+```{r}
+#rename columns
+colnames(CWM_overlap) <- c("clutch_overlap", "bm_overlap", 
+                           "GL_overlap", "foraging_overlap",
+                           "diet_5cat_overlap", 
+                           "Long", "Lat")
+
+# bind the two dataframes - note there are some NAs because we removed absent latlongs in the CWM_overlap df
+CWM_shift<- left_join(CWM_all, CWM_overlap)
+
+#calculate the percentage difference
+# CLUTCH SIZE
+CWM_shift$clutch_diff <- ((CWM_shift$clutch_overlap - CWM_shift$clutch)/ CWM_shift$clutch) *100
+
+# BODY MASS
+CWM_shift$bm_diff <- ((CWM_shift$bm_overlap - CWM_shift$body_mass_median)/ CWM_shift$body_mass_median) *100
+
+# GENERATION LENGTH
+CWM_shift$GL_diff <- ((CWM_shift$GL_overlap - CWM_shift$GL)/ CWM_shift$GL) *100
+
+
+```
+
+
+### *Plot the shift in CONTINUOUS traits with GAMM and qGAM*
+
+```{r}
+library(mgcv); library(tidymv); library(EnvStats);library(ggplot2);library(qgam); library(MASS)
+
+### GENERATION LENGTH ###
+
+# build model
+m_GL <- qgam(GL_diff~s(Lat, k=12), qu = 0.2, data = CWM_shift)
+
+# returns a tibble with the predictions from all the terms in a gam model
+m_GL_p <- predict_gam(m_GL)
+
+# Identify extreme values to determine where to crop the figure
+quantile(CWM_shift$GL_diff, c(.001, .999), na.rm = T)
+
+# Add a heading with facet wrap
+CWM_shift$gl <- "Generation Length"
+
+gl <- ggplot(CWM_shift)+
+  geom_point(aes(Lat, GL_diff), colour = "#56B4E9", shape = 1, alpha = 1/10, size = 2)+
+  geom_line(aes(Lat, fit), data = m_GL_p, colour = "black", size = 1)+
+  coord_flip()+
+  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
+  theme_bw(base_size = 20)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.position = "none") +
+  labs(x = "", y = "Deviation in CWM (%)")+
+ # ggtitle("Generation Length")+
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
+  scale_y_continuous(limits = c(-21, 5.6))+
+  scale_x_continuous(breaks = seq(-50, 50, 50),
+                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
+   facet_wrap(~gl)+
+  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
+          strip.background = element_rect(fill="black"))
+
+  
+ggsave("GL_shift.png")
+
+
+
+
+### CLUTCH ###    
+
+# build model
+m_clutch <- gamm(clutch_diff~s(Lat), data = CWM_shift, method = "REML")
+
+# returns a tibble with the predictions from all the terms in a gam model
+m_clutch_p <- predict_gam(m_clutch$gam)
+
+# Identify extreme values to determine where to crop the figure
+quantile(CWM_shift$clutch_diff, c(.001, .999), na.rm = T)
+
+# Add a heading with facet wrap
+CWM_shift$cl <- "Clutch Size"
+
+cl <- ggplot(CWM_shift)+
+  geom_point(aes(Lat, clutch_diff), colour =  "#E69F00", shape = 1, alpha = 1/10, size = 2)+
+  geom_line(aes(Lat, fit), data = m_clutch_p, colour = "black", size = 1)+
+  coord_flip()+
+  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
+  theme_bw(base_size = 20)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.position = "none") +
+  labs(x = "Latitude", y = "Deviation in CWM (%)")+
+  #ggtitle("Clutch Size")+
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
+  scale_y_continuous(limits = c(-25, 55))+
+  scale_x_continuous(breaks = seq(-50, 50, 50),
+                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
+   facet_wrap(~cl)+
+  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
+          strip.background = element_rect(fill="black"))
+  
+ggsave("clutch_shift.png")
+  
+  
+  
+### BODY MASS ###    
+
+
+# build model
+m_bm <- qgam(bm_diff~s(Lat, k=12), qu = 0.2, data = CWM_shift)
+
+# returns a tibble with the predictions from all the terms in a gam model
+m_bm_p <- predict_gam(m_bm)
+
+# Identify extreme values to determine where to crop the figure
+quantile(CWM_shift$bm_diff, c(.001, .999), na.rm = T)
+
+# Add a heading with facet wrap
+CWM_shift$bm <- "Body Mass"
+
+bm <- ggplot(CWM_shift)+
+  geom_point(aes(Lat, bm_diff), colour =  "#56B4E9", shape = 1, alpha = 1/10, size = 2)+
+  geom_line(aes(Lat, fit), data = m_bm_p, colour = "black", size = 1)+
+  coord_flip()+
+  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
+  theme_bw(base_size = 20)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.position = "none") +
+  labs(x = "", y = "Deviation in CWM (%)")+
+  #ggtitle("Body Mass")+
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
+ scale_y_continuous(limits = c(-39, 12))+
+ scale_x_continuous(breaks = seq(-50, 50, 50),
+                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
+  facet_wrap(~bm)+
+  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
+          strip.background = element_rect(fill="black"))
+  
+
+ggsave("bodymass_shift.png")
+
+
+
+
+
+# MAKE A PANEL PLOT 
+ggarrange(cl,bm, gl, nrow = 1, ncol = 3, labels = c("A", "B", "C"), 
+          font.label = list(size = 20, color = "black", face ="bold"))
+
+ggsave("continuous.png", dpi = 300, width = 21, height = 7)
+
+```
+
+
+
+### *Calculate the shift in foraging guild (CATEGORICAL)*
+
+```{r message=FALSE, error=FALSE, warning=FALSE}
+
+library(tidyverse)
+
+traits$binomial <- colnames(PAM)
+PAM <- as.data.frame(PAM)
+PAM_overlap <- as.data.frame(PAM_overlap)
+
+#PAM2<- PAM_sens
+#__________________________#
+#     Surface              #  
+#__________________________#
+
+
+# 1. subset the species that are surface foragers from the trait dataset
+surface <- traits[traits$foraging_guild %in% c("Surface"), ]
+
+# 2. subset the surface foragers within the PAM
+PAM_surface <- dplyr::select(PAM, surface$binomial)
+
+# 3. calculate the frequency of of species across latitude from the PAM rows
+PAM_surface$freq <- rowSums(PAM_surface) 
+
+# 4. subset the surface foragers within the PAM_overlap 
+# (locations where threatened species overlap with fishing activities have been removed)
+PAM_surface_NT <- dplyr::select(PAM_overlap, surface$binomial)
+
+# 5. calculate the frequency of of species across latitude from the PAM_overlap rows
+PAM_surface_NT$freq <- rowSums(PAM_surface_NT)
+
+
+#__________________________
+# Diver
+#__________________________
+
+# 1. subset non_pelagic specialists
+diver <- traits[traits$foraging_guild %in% c("Diver"), ]
+
+# 2. subset PAM
+PAM_diver <- dplyr::select(PAM, diver$binomial)
+
+# 3. calculate the frequency of each PAM row
+PAM_diver$freq <- rowSums(PAM_diver) 
+
+# 4. subset PAM
+PAM_diver_NT <- dplyr::select(PAM_overlap, diver$binomial)
+
+# 5. calculate the frequency of each PAM row
+PAM_diver_NT$freq <- rowSums(PAM_diver_NT)
+
+
+#__________________________
+# Ground
+#__________________________
+
+# 1. subset non_pelagic specialists
+ground <- traits[traits$foraging_guild %in% c("Ground"), ]
+
+# 2. subset PAM
+PAM_ground <- dplyr::select(PAM, ground$binomial)
+
+# 3. calculate the frequency of each PAM row
+PAM_ground$freq <- rowSums(PAM_ground) 
+
+# 4. subset PAM
+PAM_ground_NT <- dplyr::select(PAM_overlap, ground$binomial)
+
+# 5. calculate the frequency of each PAM row
+PAM_ground_NT$freq <- rowSums(PAM_ground_NT)
+
+
+
+
+
+#__________________________
+# Generalist
+#__________________________
+
+# 1. subset non_pelagic specialists
+general <- traits[traits$foraging_guild %in% c("Generalist"), ]
+
+# 2. subset PAM
+PAM_general <- dplyr::select(PAM, general$binomial)
+
+# 3. calculate the frequency of each PAM row
+PAM_general$freq <- rowSums(PAM_general) 
+
+# 4. subset PAM
+PAM_general_NT <- dplyr::select(PAM_overlap, general$binomial)
+
+# 5. calculate the frequency of each PAM row
+PAM_general_NT$freq <- rowSums(PAM_general_NT)
+
+
+
+##_________
+# Bind the frequencies into one dataframe in order to calculate the differences
+# First, need to add the lat and longs back so that the two data types can be joined correctly
+forage_full <- cbind(dplyr::select(CWM_all, Lat, Long),
+                     PAM_surface$freq, PAM_diver$freq,PAM_ground$freq,PAM_general$freq)
+
+forage_overlap <- cbind(dplyr::select(CWM_overlap, Lat, Long),
+                        PAM_surface_NT$freq, PAM_diver_NT$freq,PAM_ground_NT$freq,PAM_general_NT$freq)
+
+forage_diff <- left_join(forage_full, forage_overlap, by = c("Lat", "Long"))
+
+colnames(forage_diff) <- c("Lat", "Long",
+                           "surface", "diver", "ground","general",
+                           "surface_NT", "diver_NT", "ground_NT","general_NT")
+
+
+# calculate proportion of surface, diver vs. ground
+
+forage_diff$surface_prop <- (forage_diff$surface/(forage_diff$surface + forage_diff$diver + forage_diff$ground + forage_diff$general))*100
+
+forage_diff$diver_prop <- (forage_diff$diver/(forage_diff$surface + forage_diff$diver + forage_diff$ground + forage_diff$general))*100
+
+forage_diff$ground_prop <- (forage_diff$ground/(forage_diff$surface + forage_diff$diver + forage_diff$ground + forage_diff$general))*100
+
+forage_diff$general_prop <- (forage_diff$general/(forage_diff$surface + forage_diff$diver + forage_diff$ground + forage_diff$general))*100
+
+
+
+# calculate proportion of  surface_NT, diver_NT vs. ground_NT
+forage_diff$surface_NT_prop <- (forage_diff$surface_NT/(forage_diff$surface_NT + forage_diff$diver_NT + forage_diff$ground_NT + forage_diff$general_NT))*100
+
+forage_diff$diver_NT_prop <- (forage_diff$diver_NT/(forage_diff$surface_NT + forage_diff$diver_NT + forage_diff$ground_NT + forage_diff$general_NT))*100
+
+forage_diff$ground_NT_prop <- (forage_diff$ground_NT/(forage_diff$surface_NT + forage_diff$diver_NT + forage_diff$ground_NT + forage_diff$general_NT))*100
+
+forage_diff$general_NT_prop <- (forage_diff$general_NT/(forage_diff$surface_NT + forage_diff$diver_NT + forage_diff$ground_NT + forage_diff$general_NT))*100
+
+
+
+
+
+# calculate the difference for surface vs. surface_NT 
+forage_diff$surface_diff <- forage_diff$surface_NT_prop - forage_diff$surface_prop
+
+# calculate the difference for diver vs. diver_NT
+forage_diff$diver_diff <- forage_diff$diver_NT_prop - forage_diff$diver_prop
+
+# calculate the difference for ground vs. ground_NT
+forage_diff$ground_diff <- forage_diff$ground_NT_prop - forage_diff$ground_prop
+
+# calculate the difference for general vs. general_NT
+forage_diff$general_diff <- forage_diff$general_NT_prop - forage_diff$general_prop
+
+
+```
+
+
+### *Plot the shift in foraging guild (CATEGORICAL) with GAMM*
+```{r}
+
+### SURFACE FORAGER ###
+
+# build model
+m_surface <- gamm(surface_diff~s(Lat), data = forage_diff)
+
+# returns a tibble with the predictions from all the terms in a gam model
+m_surface_p <- predict_gam(m_surface$gam)
+
+# Identify extreme values to determine where to crop the figure
+quantile(forage_diff$surface_diff, c(.01, .99), na.rm = T)
+
+
+forage_diff$surf <- "Surface Forager"
+
+p1<-ggplot(forage_diff)+
+  geom_point(aes(Lat, surface_diff), colour = "#E69F00", shape = 1, alpha = 1/10, size = 2)+
+  geom_line(aes(Lat, fit), data = m_surface_p, colour = "black", size = 1)+
+  coord_flip()+
+  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
+  theme_bw(base_size = 20)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.position = "none") +
+  labs(x = "Latitude", y = "Deviation in CWM (%)")+
+  #ggtitle("Surface Forager")+
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
+ scale_y_continuous(limits = c(-50, 60))+
+  scale_x_continuous(breaks = seq(-50, 50, 50),
+                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
+  facet_wrap(~surf)+
+  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
+          strip.background = element_rect(fill="black"))
+  
+ggsave("Surface_shift.png")
+
+
+
+### DIVER ###
+
+# build model
+m_diver <- gamm(diver_diff~s(Lat), data = forage_diff)
+
+# returns a tibble with the predictions from all the terms in a gam model
+m_diver_p <- predict_gam(m_diver$gam)
+
+# Identify extreme values to determine where to crop the figure
+quantile(forage_diff$diver_diff, c(.01, .99), na.rm = T)
+
+forage_diff$div <- "Diving Forager"
+
+p2<- ggplot(forage_diff)+
+  geom_point(aes(Lat, diver_diff), colour = "#56B4E9", shape = 1, alpha = 1/10, size = 2)+
+  geom_line(aes(Lat, fit), data = m_diver_p, colour = "black", size = 1)+
+  coord_flip()+
+  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
+  theme_bw(base_size = 20)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.position = "none") +
+  labs(x = "", y = "Deviation in CWM (%)")+
+  #ggtitle("Diving Forager")+
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
+  scale_y_continuous(limits = c(-57, 36))+
+  scale_x_continuous(breaks = seq(-50, 50, 50),
+                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
+    facet_wrap(~div)+
+  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
+          strip.background = element_rect(fill="black"))
+  
+ggsave("Diver_shift.png")
+
+
+
+### GENERALIST ###
+
+# build model
+m_general <- gamm(general_diff~s(Lat), data = forage_diff)
+
+# returns a tibble with the predictions from all the terms in a gam model
+m_general_p <- predict_gam(m_general$gam)
+
+
+# Identify extreme values to determine where to crop the figure
+quantile(forage_diff$general_diff, c(.01, .99), na.rm = T)
+
+forage_diff$gen <- "Generalist Forager"
+
+p3<- ggplot(forage_diff)+
+  geom_point(aes(Lat, general_diff), colour = "#56B4E9", shape = 1, alpha = 1/10, size = 2)+
+  geom_line(aes(Lat, fit), data = m_general_p, colour = "black", size = 1)+
+  coord_flip()+
+  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
+  theme_bw(base_size = 20)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.position = "none") +
+  labs(x = "", y = "Deviation in CWM (%)")+
+  #ggtitle("Generalist Forager")+
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
+  scale_y_continuous(limits = c(-30, 37))+
+  scale_x_continuous(breaks = seq(-50, 50, 50),
+                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
+  facet_wrap(~gen)+
+  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
+          strip.background = element_rect(fill="black"))
+  
+ggsave("Generalist_shift.png")
+
+
+### GROUND ###
+
+# build model
+m_ground <- gamm(ground_diff~s(Lat), data = forage_diff)
+
+# returns a tibble with the predictions from all the terms in a gam model
+m_ground_p <- predict_gam(m_ground$gam)
+
+
+# Identify extreme values to determine where to crop the figure
+quantile(forage_diff$ground_diff, c(.01, .99), na.rm = T) # before = -35 & 32
+
+forage_diff$gr <- "Ground Forager"
+
+p4<- ggplot(forage_diff)+
+  geom_point(aes(Lat, ground_diff), colour = "#E69F00", shape = 1, alpha = 1/10, size = 2)+
+  geom_line(aes(Lat, fit), data = m_ground_p, colour = "black", size = 1)+
+  coord_flip()+
+  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
+  theme_bw(base_size = 20)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.position = "none") +
+  labs(x = "Latitude", y = "Deviation in CWM (%)")+
+  #ggtitle("Ground Forager")+
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
+  scale_y_continuous(limits = c(-13, 75))+
+  scale_x_continuous(breaks = seq(-50, 50, 50),
+                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
+  facet_wrap(~gr)+
+  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
+          strip.background = element_rect(fill="black"))
+  
+ggsave("Ground_shift.png")
+
+
+
+ggarrange(p1, p2, p3, p4, 
+          nrow = 2, ncol = 2, 
+          labels = c("A", "B", "C", "D"), 
+          font.label = list(size = 20, color = "black", face ="bold"))
+
+ggsave("mix2.png", dpi = 300, width = 14, height = 14)
+
+```
+
+
+### *Calculate the shift in diet guild (CATEGORICAL)*
+
+```{r message=FALSE, error=FALSE, warning=FALSE}
+
+library(tidyverse)
+
+traits$binomial <- colnames(PAM)
+PAM <- as.data.frame(PAM)
+PAM_overlap <- as.data.frame(PAM_overlap)
+
+#PAM2<- PAM_sens
+#__________________________#
+#     Fish & carrion       #  
+#__________________________#
+
+
+# 1. subset the species that are vertebrate consumers from the trait dataset
+vert <- traits[traits$diet_5cat %in% c("Fish and Carrion"), ]
+
+# 2. subset the vertebrate consumers within the PAM
+PAM_vert <- dplyr::select(PAM, vert$binomial)
+
+# 3. calculate the frequency of of species across latitude from the PAM rows
+PAM_vert$freq <- rowSums(PAM_vert) 
+
+# 4. subset the vertebrate consumers within the PAM_overlap 
+# (locations where threatened species overlap with fishing activities have been removed)
+PAM_vert_NT <- dplyr::select(PAM_overlap, vert$binomial)
+
+# 5. calculate the frequency of of species across latitude from the PAM_overlap rows
+PAM_vert_NT$freq <- rowSums(PAM_vert_NT)
+
+
+#__________________________
+# Invertebrates
+#__________________________
+
+# 1. subset vertebrate consumers
+invert <- traits[traits$diet_5cat %in% c("Invertebrates"), ]
+
+# 2. subset PAM
+PAM_invert <- dplyr::select(PAM, invert$binomial)
+
+# 3. calculate the frequency of each PAM row
+PAM_invert$freq <- rowSums(PAM_invert) 
+
+# 4. subset PAM
+PAM_invert_NT <- dplyr::select(PAM_overlap, invert$binomial)
+
+# 5. calculate the frequency of each PAM row
+PAM_invert_NT$freq <- rowSums(PAM_invert_NT)
+
+
+#__________________________
+# Omnivores
+#__________________________
+
+# 1. subset Omnivores
+Omnivore <- traits[traits$diet_5cat %in% c("Omnivore"), ]
+
+# 2. subset PAM
+PAM_omniv <- dplyr::select(PAM, Omnivore$binomial)
+
+# 3. calculate the frequency of each PAM row
+PAM_omniv$freq <- rowSums(PAM_omniv) 
+
+# 4. subset PAM
+PAM_omniv_NT <- dplyr::select(PAM_overlap, Omnivore$binomial)
+
+# 5. calculate the frequency of each PAM row
+PAM_omniv_NT$freq <- rowSums(PAM_omniv_NT)
+
+
+
+##_________
+# Bind the frequencies into one dataframe in order to calculate the differences
+# First, need to add the lat and longs back so that the two data types can be joined correctly
+diet_full <- cbind(dplyr::select(CWM_all, Lat, Long),
+                     PAM_vert$freq, PAM_invert$freq,PAM_omniv$freq)
+
+diet_overlap <- cbind(dplyr::select(CWM_overlap, Lat, Long),
+                        PAM_vert_NT$freq, PAM_invert_NT$freq,PAM_omniv_NT$freq)
+
+diet_diff <- left_join(diet_full, diet_overlap, by = c("Lat", "Long"))
+
+colnames(diet_diff) <- c("Lat", "Long",
+                           "vert", "invert", "omnivore",
+                           "vert_NT", "invert_NT", "omnivore_NT")
+
+
+
+# calculate proportion
+
+diet_diff$vert_prop <- (diet_diff$vert/
+                               (diet_diff$vert + 
+                                  diet_diff$invert + 
+                                  diet_diff$omnivore))*100
+
+diet_diff$invert_prop <- (diet_diff$invert/(diet_diff$vert + 
+                                              diet_diff$invert + 
+                                              diet_diff$omnivore))*100
+
+diet_diff$omnivore_prop <- (diet_diff$omnivore/(diet_diff$vert + 
+                                                  diet_diff$invert + 
+                                                  diet_diff$omnivore))*100
+
+
+# calculate proportion of  vert_NT, invert_NT vs. omnivore_NT
+diet_diff$vert_NT_prop <- (diet_diff$vert_NT/(diet_diff$vert_NT + 
+                                                diet_diff$invert_NT + 
+                                                diet_diff$omnivore_NT))*100
+
+diet_diff$invert_NT_prop <- (diet_diff$invert_NT/(diet_diff$vert_NT + 
+                                                    diet_diff$invert_NT +
+                                                    diet_diff$omnivore_NT))*100
+
+diet_diff$omnivore_NT_prop <- (diet_diff$omnivore_NT/(diet_diff$vert_NT + 
+                                                        diet_diff$invert_NT + 
+                                                        diet_diff$omnivore_NT))*100
+
+
+
+
+
+# calculate the difference for vert vs. vert_NT 
+diet_diff$vert_diff <- diet_diff$vert_NT_prop - diet_diff$vert_prop
+
+# calculate the difference for invert vs. invert_NT
+diet_diff$invert_diff <- diet_diff$invert_NT_prop - diet_diff$invert_prop
+
+# calculate the difference for omnivore vs. omnivore_NT
+diet_diff$omnivore_diff <- diet_diff$omnivore_NT_prop - diet_diff$omnivore_prop
+
+
+```
+
+
+
+
+
+
+
+
+
+### *Plot the shift in diet guild (CATEGORICAL) with GAMM*
+```{r}
+
+### VERTEBRATE FORAGER ###
+
+# build model
+m_vert <- gamm(vert_diff~s(Lat), data = diet_diff)
+
+# returns a tibble with the predictions from all the terms in a gam model
+m_vert_p <- predict_gam(m_vert$gam)
+
+# Identify extreme values to determine where to crop the figure
+quantile(diet_diff$vert_diff, c(.01, .99), na.rm = T)
+
+
+diet_diff$vertebrate <- "Vertebrate & Scavenger Diet"
+
+vertebrates<-ggplot(diet_diff)+
+  geom_point(aes(Lat, vert_diff), colour = "#E69F00", shape = 1, alpha = 1/10, size = 2)+
+  geom_line(aes(Lat, fit), data = m_vert_p, colour = "black", size = 1)+
+  coord_flip()+
+  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
+  theme_bw(base_size = 20)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.position = "none") +
+  labs(x = "Latitude", y = "Deviation in CWM (%)")+
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
+ #scale_y_continuous(limits = c(-50, 60))+
+  scale_x_continuous(breaks = seq(-50, 50, 50),
+                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
+  facet_wrap(~vertebrate)+
+  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
+          strip.background = element_rect(fill="black"))
+  
+ggsave("vertebrate_shift.png")
+
+
+
+### INVERTEBRATES ###
+
+# build model
+m_invert <- gamm(invert_diff~s(Lat), data = diet_diff)
+
+# returns a tibble with the predictions from all the terms in a gam model
+m_invert_p <- predict_gam(m_invert$gam)
+
+# Identify extreme values to determine where to crop the figure
+quantile(diet_diff$invert_diff, c(.01, .99), na.rm = T)
+
+diet_diff$invertebrate <- "Invertebrate Diet"
+
+inverts<- ggplot(diet_diff)+
+  geom_point(aes(Lat, invert_diff), colour = "#56B4E9", shape = 1, alpha = 1/10, size = 2)+
+  geom_line(aes(Lat, fit), data = m_invert_p, colour = "black", size = 1)+
+  coord_flip()+
+  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
+  theme_bw(base_size = 20)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.position = "none") +
+  labs(x = "", y = "Deviation in CWM (%)")+
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
+  #scale_y_continuous(limits = c(-57, 36))+
+  scale_x_continuous(breaks = seq(-50, 50, 50),
+                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
+    facet_wrap(~invertebrate)+
+  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
+          strip.background = element_rect(fill="black"))
+  
+ggsave("invertebrate_shift.png")
+
+
+
+### Omnivore ###
+
+# build model
+m_omniv <- gamm(omnivore_diff~s(Lat), data = diet_diff)
+
+# returns a tibble with the predictions from all the terms in a gam model
+m_omniv_p <- predict_gam(m_omniv$gam)
+
+
+# Identify extreme values to determine where to crop the figure
+quantile(diet_diff$omnivore_diff, c(.01, .99), na.rm = T)
+
+diet_diff$omnivores <- "Omnivore Diet"
+
+Omnivores<- ggplot(diet_diff)+
+  geom_point(aes(Lat, omnivore_diff), colour = "#56B4E9", shape = 1, alpha = 1/10, size = 2)+
+  geom_line(aes(Lat, fit), data = m_omniv_p, colour = "black", size = 1)+
+  coord_flip()+
+  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
+  theme_bw(base_size = 20)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.position = "none") +
+  labs(x = "", y = "Deviation in CWM (%)")+
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
+  scale_y_continuous(limits = c(-30, 37))+
+  scale_x_continuous(breaks = seq(-50, 50, 50),
+                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
+  facet_wrap(~omnivores)+
+  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
+          strip.background = element_rect(fill="black"))
+  
+ggsave("omnivore_shift.png")
+
+
+
+
+ggarrange(vertebrates, inverts, Omnivores,
+          nrow = 1, ncol = 3, 
+          labels = c("A", "B", "C"), 
+          font.label = list(size = 20, color = "black", face ="bold"))
+
+ggsave("diet.png", dpi = 300, width = 21, height = 7)
+
+
+
+ggarrange(cl, bm, gl,
+          vertebrates, inverts, Omnivores,
+          p1,p2,p3,p4,
+          nrow = 4, ncol = 3, 
+          labels = c("A", "B", "C",
+                     "D", "E", "F",
+                     "G","H","I","J"), 
+          font.label = list(size = 20, color = "black", face ="bold"))
+
+
+ggsave("allShifts.png", dpi = 300, width = 21, height = 25)
+```
+
+
+
+
