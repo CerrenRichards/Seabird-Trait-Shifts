@@ -1,5 +1,5 @@
 # Seabird-Trait-Shifts
-This repository contains the R code required to replicate the analyses in **Richards et al. "Bycatch mitigation could prevent strong changes in the ecological strategies of seabird communities across the globe"**.
+This repository contains the R code required to replicate the analyses in **Richards et al. "Bycatch-threatened seabirds contribute disproportionally to global community trait composition"**.
 
 ## Scripts
 `Bycatch Trait Shifts.Rmd` The R Markdown file that contains the code for the analysis.
