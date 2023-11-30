@@ -69,11 +69,28 @@ BOTW <- readOGR(dsn = "/Users/cerridwenr/Desktop/Masters Thesis /Chapter two/BOT
 # Read in the trait and seabird data
 traits <- read.csv("Imputed_Trait_Data.csv")
 
+
+# read in seaduck data
+duck <- read.csv("seaducks.csv")
+duck$body_mass_median <- log10(duck$body_mass_median)
+duck$GL <- log10(duck$GL)
+
+# Join the seabird and sea duck dataframes
+traits <- rbind(traits, duck)
+
+# BirdLife International does not have the distribution layers for Thayer's gull, so remove from analysis
+traits <- traits %>% filter(binomial != "Larus thayeri")
+
+
+# Rearrange the names based on alphabetical order
+traits <- traits %>% arrange(binomial)
+
+
 # Subset the BOTW dataset to only contain seabirds
 sb<- subset(BOTW, SCINAME %in% traits$Binomial)
 
 #save the SHAPE file as an RDS
-saveRDS(sb, "BOTW_seabirds_341.rds")
+saveRDS(sb, "BOTW_seabirds_361.rds")
 
 ```
 
