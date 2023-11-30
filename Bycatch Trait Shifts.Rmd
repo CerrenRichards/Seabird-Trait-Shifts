@@ -11,7 +11,7 @@ output: word_document
 library(rmarkdown)
 library(knitr)
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir = '/Users/cerridwenr/Desktop/Bycatch Trait Shifts')
+knitr::opts_knit$set(root.dir = '/Users/cerren/Desktop/Trait shifts - GECCO/Revisions/Seabird-Trait-Shifts')
 
 ```
 
@@ -591,6 +591,12 @@ CWM_all <- functcomp(traits, PAM, CWM.type = "dom", bin.num = NULL)
 CWM_all$Lat <- PAM2$`Latitude(y)`
 CWM_all$Long <- PAM2$`Longitude(x)`
 
+# Save
+saveRDS(CWM_all, "CWM_all.rds")
+
+# Read in if closed R
+CWM_all <- readRDS("CWM_all.rds")
+
 ```
 
 
@@ -633,6 +639,12 @@ CWM_overlap <- functcomp(traits, PAM_overlap, CWM.type = "dom", bin.num = NULL)
 #add lat longs back
 CWM_overlap$Long <- PAM_overlap_nona$Long
 CWM_overlap$Lat <-  PAM_overlap_nona$Lat
+
+# Save
+saveRDS(CWM_overlap, "CWM_overlap.rds")
+
+# Read in if closed R
+CWM_overlap <- readRDS("CWM_overlap.rds")
 ```
 
 
@@ -663,6 +675,26 @@ CWM_shift$GL_diff <- ((CWM_shift$GL_overlap - CWM_shift$GL)/ CWM_shift$GL) *100
 ```
 
 
+
+### Assign marine region for each lat long
+
+Marine regions from: 
+Flanders Marine Institute (2021). Global Oceans and Seas, version 1. Available online at https://www.marineregions.org/. https://doi.org/10.14284/542.
+
+```{r}
+
+# Load packages
+library("ggplot2");library("sf");library("rnaturalearth"); library("rnaturalearthdata")
+
+marineregions <- st_read("goas_v01.shp")
+
+
+```
+
+
+
+
+
 ### *Plot the shift in CONTINUOUS traits with GAMM and qGAM*
 
 ```{r}
@@ -684,7 +716,7 @@ CWM_shift$gl <- "Generation Length"
 
 gl <- ggplot(CWM_shift)+
   geom_point(aes(Lat, GL_diff), colour = "#56B4E9", shape = 1, alpha = 1/10, size = 2)+
-  geom_line(aes(Lat, fit), data = m_GL_p, colour = "black", size = 1)+
+  #geom_line(aes(Lat, fit), data = m_GL_p, colour = "black", size = 1)+
   coord_flip()+
   geom_hline(yintercept = 0, linetype="dashed", size = 1)+
   theme_bw(base_size = 20)+
