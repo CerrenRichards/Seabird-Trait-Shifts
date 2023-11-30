@@ -365,7 +365,7 @@ for (i in 1:length(iucn)) {
 
 iucn <- Reduce(rbind, iucn) ## Reduce the lists down
 
-iucn[1:341] <- NULL # remove all of the extra species names in the list
+iucn[1:361] <- NULL # remove all of the extra species names in the list
 
 # Remove all lists with species with no threats
 iucn <- iucn[sapply(iucn, length)>1] 
@@ -437,7 +437,7 @@ res(vesselRaster)
 ##### BIRD DATA #####
 
 ## Add a column to indicate whether any threatened species is present
-birds$all <- apply(birds[,3:343],1,max) 
+birds$all <- apply(birds[,3:363],1,max) 
 
 #project bird data
 birdRaster <- rasterFromXYZ(birds[,c("Longitude(x)","Latitude(y)","all")])
@@ -470,13 +470,13 @@ bycatch_birds <- left_join(bycatch_birds, vesselDF)
 bycatch_birds$vessels[is.na(bycatch_birds$vessels)] <- 0
 
 ## Remove locations where birds and vessels overlap
-## This is achieved through subtracting the vessel column (137) from all seabird columns (3:136)
-for(i in colnames(bycatch_birds[,3:136])) {
-  bycatch_birds[i] <- bycatch_birds[i] - bycatch_birds[137]
+## This is achieved through subtracting the vessel column (149) from all seabird columns (3:148)
+for(i in colnames(bycatch_birds[,3:148])) {
+  bycatch_birds[i] <- bycatch_birds[i] - bycatch_birds[149]
 }
 
 ## Ensure all the values are rounded to 0 decimal places
-birdround <- round(bycatch_birds[3:136], digits = 0)
+birdround <- round(bycatch_birds[3:148], digits = 0)
 
 ## Any zero bird values have now been changed to `-1`. 
 ## We will now replace all `-1` values with zero
@@ -502,8 +502,8 @@ saveRDS(birds_final, "PAM_No_Threatened_Overlap.rds")
 full <- birds %>% dplyr::select(`Longitude(x)`, `Latitude(y)`, threatened$binomial)
 removed <- birds_final %>% dplyr::select(`Longitude(x)`, `Latitude(y)`, threatened$binomial)
 
-full$all <- apply(full[,3:136],1,max) 
-removed$all <- apply(removed[,3:136],1,max)
+full$all <- apply(full[,3:148],1,max) 
+removed$all <- apply(removed[,3:148],1,max)
 
 # ORIGIONAL BIRD DATA
 fullraster <- rasterFromXYZ(full[,c("Longitude(x)","Latitude(y)","all")])
