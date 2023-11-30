@@ -686,8 +686,44 @@ Flanders Marine Institute (2021). Global Oceans and Seas, version 1. Available o
 # Load packages
 library("ggplot2");library("sf");library("rnaturalearth"); library("rnaturalearthdata")
 
+# Read in marine regions
 marineregions <- st_read("goas_v01.shp")
 
+# Assign CRS
+marineregions<- st_transform(marineregions, crs = 4326)
+
+# Extract CWM_shift coordinates
+shift_coord <- CWM_shift %>% select(Lat, Long)
+
+# convert to spatial
+shift_coord <- shift_coord %>% 
+  st_as_sf(coords = c("Long", "Lat"),
+           crs = 4326)
+
+# check that the two objects have the same CRS
+st_crs(marineregions) == st_crs(shift_coord)
+
+# Error with the spherical geometry when joining below, so turn off the s2 processing first
+sf::sf_use_s2(FALSE)
+
+# locate for each point the nearest polygon
+nearest_polygon <- st_join(shift_coord, marineregions,
+                           join = st_nearest_feature)
+
+# Select only the needed data
+nearest_polygon <- nearest_polygon %>% rename(Bioregion = NAME_E) %>% select(Colony.Id, Bioregion)
+nearest_polygon$geometry <- NULL
+
+
+# Recreate the colonly dataframe for plotting and join the bioregion data
+colonies <- sb.populations %>% group_by(Colony.Id) %>% 
+              summarise(Lat = min(Lat),
+                        Lon = min(Lon)) %>%
+              left_join(., nearest_polygon)
+
+
+## Replace the NAs in the Location column with the Colony column cells
+#colonies <- colonies %>% mutate(Bioregion = coalesce(Bioregion, Colony))
 
 ```
 
