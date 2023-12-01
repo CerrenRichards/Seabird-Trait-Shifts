@@ -692,8 +692,11 @@ marineregions <- st_read("goas_v01.shp")
 # Assign CRS
 marineregions<- st_transform(marineregions, crs = 4326)
 
+## Assign an ID column so that we can join polygons back to original data
+CWM_shift$ID <- factor(1:38314)
+
 # Extract CWM_shift coordinates
-shift_coord <- CWM_shift %>% select(Lat, Long)
+shift_coord <- CWM_shift %>% select(Lat, Long, ID)
 
 # convert to spatial
 shift_coord <- shift_coord %>% 
@@ -710,20 +713,15 @@ sf::sf_use_s2(FALSE)
 nearest_polygon <- st_join(shift_coord, marineregions,
                            join = st_nearest_feature)
 
+
 # Select only the needed data
-nearest_polygon <- nearest_polygon %>% rename(Bioregion = NAME_E) %>% select(Colony.Id, Bioregion)
+nearest_polygon <- nearest_polygon %>% rename(ocean = name) %>% select(ID, ocean)
 nearest_polygon$geometry <- NULL
 
+# Match the marine region to the CWM_shift dataframe
+CWM_shift <- left_join(CWM_shift, nearest_polygon)
+CWM_shift$ID <- NULL
 
-# Recreate the colonly dataframe for plotting and join the bioregion data
-colonies <- sb.populations %>% group_by(Colony.Id) %>% 
-              summarise(Lat = min(Lat),
-                        Lon = min(Lon)) %>%
-              left_join(., nearest_polygon)
-
-
-## Replace the NAs in the Location column with the Colony column cells
-#colonies <- colonies %>% mutate(Bioregion = coalesce(Bioregion, Colony))
 
 ```
 
