@@ -723,8 +723,55 @@ CWM_shift <- left_join(CWM_shift, nearest_polygon)
 CWM_shift$ID <- NULL
 
 
+# Save
+saveRDS(CWM_shift, "CWM_shift.rds")
 ```
 
+### 
+
+```{r}
+library(ggplot2);library(ggdist)
+
+
+means <- CWM_shift %>% group_by(ocean) %>% summarise(GL_mean = mean(GL_diff, na.rm = T),
+                                                     GL_sd = sd(GL_diff, na.rm = T),
+                                                     clutch_mean = mean(clutch_diff, na.rm = T),
+                                                     clutch_sd = sd(clutch_diff, na.rm = T),
+                                                     bm_mean = mean(bm_diff, na.rm = T),
+                                                     bm_sd = sd(bm_diff, na.rm = T))
+
+
+
+ggplot(data = means, aes(x = ocean, y = GL_mean)) +
+  geom_bar(stat="identity", color="black")+
+  geom_errorbar(aes(x=ocean, ymin = GL_mean, ymax=GL_mean-GL_sd), width=0.4, alpha=0.9) +
+   coord_flip() 
+
+
+ggplot(data = CWM_shift, aes(x = GL_diff, y = ocean)) +
+  stat_halfeye()
+
+ggplot(data = CWM_shift, aes(x = ocean, y = GL_diff)) +
+  geom_violin(position = position_nudge(x = 0.2, y = 0), alpha = 0.8) +
+  coord_flip() +
+   scale_y_continuous(limits = c(-21, 5.6))
+
+ggplot(data = CWM_shift, aes(x = ocean, y = clutch_diff)) +
+  geom_violin( alpha = 0.8) +
+  coord_flip() +
+  theme_bw()+
+  scale_y_continuous(limits = c(-25, 55))
+
+ggplot(data = CWM_shift, aes(x = ocean, y = bm_diff)) +
+  geom_violin(position = position_nudge(x = 0.2, y = 0), alpha = 0.8) +
+  coord_flip() +
+  scale_y_continuous(limits = c(-39, 12))
+
+ggplot(data = CWM_shift, aes(x = ocean, y = bm_diff)) +
+  geom_boxplot() +
+  coord_flip() 
+
+```
 
 
 
