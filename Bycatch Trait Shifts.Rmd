@@ -730,15 +730,30 @@ saveRDS(CWM_shift, "CWM_shift.rds")
 ### 
 
 ```{r}
-library(ggplot2);library(ggdist)
+library(ggplot2);library(ggdist); library(tidyr)
 
+## Calculate the sd to summarise the shifts
+stdev <- CWM_shift %>% group_by(ocean) %>% summarise(`Generation Length` = sd(GL_diff, na.rm = T),
+                                                     `Clutch Size` = sd(clutch_diff, na.rm = T),
+                                                     `Body Mass` = sd(bm_diff, na.rm = T))
 
-means <- CWM_shift %>% group_by(ocean) %>% summarise(GL_mean = mean(GL_diff, na.rm = T),
-                                                     GL_sd = sd(GL_diff, na.rm = T),
-                                                     clutch_mean = mean(clutch_diff, na.rm = T),
-                                                     clutch_sd = sd(clutch_diff, na.rm = T),
-                                                     bm_mean = mean(bm_diff, na.rm = T),
-                                                     bm_sd = sd(bm_diff, na.rm = T))
+## Calculate the means to summarise the shifts
+means <- CWM_shift %>% group_by(ocean) %>% summarise(`Generation Length` = mean(GL_diff, na.rm = T),
+                                                     `Clutch Size` = mean(clutch_diff, na.rm = T),
+                                                     `Body Mass` = mean(bm_diff, na.rm = T))
+
+# Gather
+means2 <- means %>% gather(value = "Mean", key = "Trait", `Generation Length`:`Body Mass`)
+stdev2 <- stdev %>% gather(value = "SD", key = "Trait", `Generation Length`:`Body Mass`)
+
+## Join together
+means <- left_join(means2, stdev2)
+
+## For the SD plotting in ggplot, if the means are positive, need to make negative
+pos <- means %>% filter(Mean > 0)
+pos$SD <- pos$SD*-1
+neg <- means %>% filter(Mean < 0)
+means <- rbind(neg, pos)
 
 
 
@@ -746,6 +761,14 @@ ggplot(data = means, aes(x = ocean, y = GL_mean)) +
   geom_bar(stat="identity", color="black")+
   geom_errorbar(aes(x=ocean, ymin = GL_mean, ymax=GL_mean-GL_sd), width=0.4, alpha=0.9) +
    coord_flip() 
+
+ggplot(data = means, aes(x = ocean, y = Mean)) +
+  geom_bar(stat="identity", color="black")+
+  geom_errorbar(aes(x=ocean, ymin = Mean, ymax=Mean-SD), width=0.4, alpha=0.9) +
+    geom_hline(yintercept = 0, linetype="dashed", size = 1)+
+   coord_flip() +
+  facet_wrap(~Trait, scales = "free_x")
+
 
 
 ggplot(data = CWM_shift, aes(x = GL_diff, y = ocean)) +
@@ -767,7 +790,7 @@ ggplot(data = CWM_shift, aes(x = ocean, y = bm_diff)) +
   coord_flip() +
   scale_y_continuous(limits = c(-39, 12))
 
-ggplot(data = CWM_shift, aes(x = ocean, y = bm_diff)) +
+ggplot(data = CWM_shift, aes(x = ocean, y = GL_diff)) +
   geom_boxplot() +
   coord_flip() 
 
