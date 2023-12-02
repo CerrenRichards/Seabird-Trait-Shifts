@@ -755,17 +755,18 @@ pos$SD <- pos$SD*-1
 neg <- means %>% filter(Mean < 0)
 means <- rbind(neg, pos)
 
+## Assign colour category
+means$colour <- ifelse(means$Mean < 0, "negative","positive")
 
-
-ggplot(data = means, aes(x = ocean, y = GL_mean)) +
-  geom_bar(stat="identity", color="black")+
-  geom_errorbar(aes(x=ocean, ymin = GL_mean, ymax=GL_mean-GL_sd), width=0.4, alpha=0.9) +
-   coord_flip() 
+ggplot(dtf1,aes(ID,Diff,label="",hjust=hjust))+
+  geom_bar(stat="identity",position="identity",aes(fill = colour))+
+  scale_fill_manual(values=c(positive="firebrick1",negative="steelblue"))
 
 ggplot(data = means, aes(x = ocean, y = Mean)) +
-  geom_bar(stat="identity", color="black")+
+  geom_bar(stat="identity", color="black", aes(fill = colour))+
   geom_errorbar(aes(x=ocean, ymin = Mean, ymax=Mean-SD), width=0.4, alpha=0.9) +
     geom_hline(yintercept = 0, linetype="dashed", size = 1)+
+   scale_fill_manual(values=c(positive="#E69F00",negative="#56B4E9"))+
    coord_flip() +
   facet_wrap(~Trait, scales = "free_x")
 
