@@ -730,7 +730,7 @@ saveRDS(CWM_shift, "CWM_shift.rds")
 ### 
 
 ```{r}
-library(ggplot2);library(ggdist); library(tidyr)
+library(ggplot2);library(ggdist); library(tidyverse)
 
 ## Calculate the sd to summarise the shifts
 stdev <- CWM_shift %>% group_by(ocean) %>% summarise(`Generation Length` = sd(GL_diff, na.rm = T),
@@ -758,6 +758,18 @@ means <- rbind(neg, pos)
 ## Assign colour category
 means$colour <- ifelse(means$Mean < 0, "negative","positive")
 
+## Assign Levels to the data to order the plot
+means$ocean = factor(means$ocean, levels=c("Arctic Ocean", "North Atlantic Ocean",
+                                           "South Atlantic Ocean", "North Pacific Ocean",
+                                           "South Pacific Ocean", "Baltic Sea",
+                                           "Mediterranean Region", 
+                                           "South China and Easter Archipelagic Seas",
+                                           "Indian Ocean", "Southern Ocean"))
+
+## Rename "South China and Easter Archipelagic Seas", 
+means$ocean <- recode(means$ocean, `South China and Easter Archipelagic Seas` = "South China Sea")
+
+
 ## Set the theme
 plottheme <-  theme_bw(base_size = 15)+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
@@ -769,6 +781,7 @@ plottheme <-  theme_bw(base_size = 15)+
 
 # plot
 ggplot(data = means, aes(x = ocean, y = Mean)) +
+  scale_x_discrete(limits=rev)+
   geom_bar(stat="identity", color="black", aes(fill = colour))+
   geom_errorbar(aes(x=ocean, ymin = Mean, ymax=Mean-SD), width=0.4, alpha=0.9) +
     geom_hline(yintercept = 0,  size = 0.4)+
