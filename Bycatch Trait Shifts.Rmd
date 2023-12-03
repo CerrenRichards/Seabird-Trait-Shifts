@@ -758,19 +758,32 @@ means <- rbind(neg, pos)
 ## Assign colour category
 means$colour <- ifelse(means$Mean < 0, "negative","positive")
 
-ggplot(dtf1,aes(ID,Diff,label="",hjust=hjust))+
-  geom_bar(stat="identity",position="identity",aes(fill = colour))+
-  scale_fill_manual(values=c(positive="firebrick1",negative="steelblue"))
+## Set the theme
+plottheme <-  theme_bw(base_size = 15)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(axis.title.y = element_text(vjust = 3)) +
+  theme(axis.title.x = element_text(vjust = -1))+
+  theme(strip.text.x = element_text(size = 15, color = "white", face = "bold"), 
+          strip.background = element_rect(fill="black"))+
+  theme(legend.position = "none")
 
+# plot
 ggplot(data = means, aes(x = ocean, y = Mean)) +
   geom_bar(stat="identity", color="black", aes(fill = colour))+
   geom_errorbar(aes(x=ocean, ymin = Mean, ymax=Mean-SD), width=0.4, alpha=0.9) +
-    geom_hline(yintercept = 0, linetype="dashed", size = 1)+
-   scale_fill_manual(values=c(positive="#E69F00",negative="#56B4E9"))+
+    geom_hline(yintercept = 0,  size = 0.4)+
+   scale_fill_manual(values=c(positive="#FF8E00",negative="#003F7D"))+
    coord_flip() +
-  facet_wrap(~Trait, scales = "free_x")
+  facet_wrap(~Trait, scales = "free_x")+ 
+  plottheme+
+  labs(x = "", y = "Deviation in CWM (%)")
 
 
+
+
+ggplot(dtf1,aes(ID,Diff,label="",hjust=hjust))+
+  geom_bar(stat="identity",position="identity",aes(fill = colour))+
+  scale_fill_manual(values=c(positive="firebrick1",negative="steelblue"))
 
 ggplot(data = CWM_shift, aes(x = GL_diff, y = ocean)) +
   stat_halfeye()
