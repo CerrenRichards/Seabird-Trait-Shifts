@@ -610,7 +610,7 @@ PAM_overlap <- readRDS("PAM_No_Threatened_Overlap.rds")
 PAM_overlap$all <- NULL
 
 # Reorder the columns of `PAM_overlap` to match the PAM2 column orders
-# this is important for caluclating the CWM because the orders of the species
+# this is important for calculating the CWM because the orders of the species
 # must match the traits order
 PAM_overlap <- PAM_overlap[names(PAM)]
 
@@ -735,16 +735,24 @@ library(ggplot2);library(ggdist); library(tidyverse)
 ## Calculate the sd to summarise the shifts
 stdev <- CWM_shift %>% group_by(ocean) %>% summarise(`Generation Length` = sd(GL_diff, na.rm = T),
                                                      `Clutch Size` = sd(clutch_diff, na.rm = T),
-                                                     `Body Mass` = sd(bm_diff, na.rm = T))
+                                                     `Body Mass` = sd(bm_diff, na.rm = T),
+                                                     `Surface Forager`= sd(surface_diff, na.rm = T),
+                                                     `Diving Forager`= sd(diver_diff, na.rm = T),
+                                                     `Generalist Forager`= sd(general_diff, na.rm = T),
+                                                     `Ground Forager`= sd(ground_diff, na.rm = T))
 
 ## Calculate the means to summarise the shifts
 means <- CWM_shift %>% group_by(ocean) %>% summarise(`Generation Length` = mean(GL_diff, na.rm = T),
                                                      `Clutch Size` = mean(clutch_diff, na.rm = T),
-                                                     `Body Mass` = mean(bm_diff, na.rm = T))
+                                                     `Body Mass` = mean(bm_diff, na.rm = T),
+                                                     `Surface Forager`= mean(surface_diff, na.rm = T),
+                                                     `Diving Forager`= mean(diver_diff, na.rm = T),
+                                                     `Generalist Forager`= mean(general_diff, na.rm = T),
+                                                     `Ground Forager`= mean(ground_diff, na.rm = T))
 
 # Gather
-means2 <- means %>% gather(value = "Mean", key = "Trait", `Generation Length`:`Body Mass`)
-stdev2 <- stdev %>% gather(value = "SD", key = "Trait", `Generation Length`:`Body Mass`)
+means2 <- means %>% gather(value = "Mean", key = "Trait", `Generation Length`:`Ground Forager`)
+stdev2 <- stdev %>% gather(value = "SD", key = "Trait", `Generation Length`:`Ground Forager`)
 
 ## Join together
 means <- left_join(means2, stdev2)
@@ -1058,7 +1066,7 @@ PAM_general_NT$freq <- rowSums(PAM_general_NT)
 forage_full <- cbind(dplyr::select(CWM_all, Lat, Long),
                      PAM_surface$freq, PAM_diver$freq,PAM_ground$freq,PAM_general$freq)
 
-forage_overlap <- cbind(dplyr::select(CWM_overlap, Lat, Long),
+forage_overlap <- cbind(dplyr::select(CWM_all, Lat, Long),
                         PAM_surface_NT$freq, PAM_diver_NT$freq,PAM_ground_NT$freq,PAM_general_NT$freq)
 
 forage_diff <- left_join(forage_full, forage_overlap, by = c("Lat", "Long"))
@@ -1106,6 +1114,12 @@ forage_diff$ground_diff <- forage_diff$ground_NT_prop - forage_diff$ground_prop
 forage_diff$general_diff <- forage_diff$general_NT_prop - forage_diff$general_prop
 
 
+## Join to the CWM_shift dataframe
+# Select columns
+forage_diff <- forage_diff %>% select(Lat, Long, 
+                                      surface_diff, diver_diff, ground_diff, general_diff)
+#Join
+CWM_shift <- left_join(CWM_shift, forage_diff)
 ```
 
 
@@ -1128,7 +1142,7 @@ forage_diff$surf <- "Surface Forager"
 
 p1<-ggplot(forage_diff)+
   geom_point(aes(Lat, surface_diff), colour = "#E69F00", shape = 1, alpha = 1/10, size = 2)+
-  geom_line(aes(Lat, fit), data = m_surface_p, colour = "black", size = 1)+
+  #geom_line(aes(Lat, fit), data = m_surface_p, colour = "black", size = 1)+
   coord_flip()+
   geom_hline(yintercept = 0, linetype="dashed", size = 1)+
   theme_bw(base_size = 20)+
@@ -1163,7 +1177,7 @@ forage_diff$div <- "Diving Forager"
 
 p2<- ggplot(forage_diff)+
   geom_point(aes(Lat, diver_diff), colour = "#56B4E9", shape = 1, alpha = 1/10, size = 2)+
-  geom_line(aes(Lat, fit), data = m_diver_p, colour = "black", size = 1)+
+  #geom_line(aes(Lat, fit), data = m_diver_p, colour = "black", size = 1)+
   coord_flip()+
   geom_hline(yintercept = 0, linetype="dashed", size = 1)+
   theme_bw(base_size = 20)+
