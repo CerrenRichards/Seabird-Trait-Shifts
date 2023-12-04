@@ -612,7 +612,7 @@ PAM_overlap$all <- NULL
 # Reorder the columns of `PAM_overlap` to match the PAM2 column orders
 # this is important for caluclating the CWM because the orders of the species
 # must match the traits order
-PAM_overlap <- PAM_overlap[names(PAM2)]
+PAM_overlap <- PAM_overlap[names(PAM)]
 
 # Remove the lat and long columns because we need to sum the rows below
 PAM_overlap$`Longitude(x)` <- NULL
@@ -727,7 +727,7 @@ CWM_shift$ID <- NULL
 saveRDS(CWM_shift, "CWM_shift.rds")
 ```
 
-### 
+### *Plot the shift in CONTINUOUS traits*
 
 ```{r}
 library(ggplot2);library(ggdist); library(tidyverse)
@@ -792,11 +792,13 @@ ggplot(data = means, aes(x = ocean, y = Mean)) +
   labs(x = "", y = "Deviation in CWM (%)")
 
 
+```
+
+### Violin plot
+```{r}
 
 
-ggplot(dtf1,aes(ID,Diff,label="",hjust=hjust))+
-  geom_bar(stat="identity",position="identity",aes(fill = colour))+
-  scale_fill_manual(values=c(positive="firebrick1",negative="steelblue"))
+
 
 ggplot(data = CWM_shift, aes(x = GL_diff, y = ocean)) +
   stat_halfeye()
@@ -820,9 +822,7 @@ ggplot(data = CWM_shift, aes(x = ocean, y = bm_diff)) +
 ggplot(data = CWM_shift, aes(x = ocean, y = GL_diff)) +
   geom_boxplot() +
   coord_flip() 
-
 ```
-
 
 
 
@@ -965,7 +965,7 @@ traits$binomial <- colnames(PAM)
 PAM <- as.data.frame(PAM)
 PAM_overlap <- as.data.frame(PAM_overlap)
 
-#PAM2<- PAM_sens
+
 #__________________________#
 #     Surface              #  
 #__________________________#
@@ -1537,6 +1537,349 @@ ggarrange(cl, bm, gl,
 
 ggsave("allShifts.png", dpi = 300, width = 21, height = 25)
 ```
+
+
+
+
+
+## JAN 14th - CWM global map - EXTREMES REMOVED
+```{r}
+
+library(ggplot2);library(viridis); library(ggpubr); library(tidyverse); 
+library(sf);library("rnaturalearth"); library("rnaturalearthdata")
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# FULL ORIGIONAL DATA SCALE
+
+### CONTINUOUS ###
+
+# Clutch Size
+
+ggplot() +
+  theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = clutch), data = CWM_shift) + 
+  scale_color_viridis(option = "D", limits = c(1, 3),
+  guide = guide_colorbar (barheight = unit(4, units = "mm"), 
+                          barwidth = unit(70, units = "mm"),
+                          label.theme = element_text(angle = 270))) +
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom", legend.box = "vertical", legend.title = element_blank())+
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(),)+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ggsave("extreme_Clutch.png")
+
+
+
+
+# Body Mass
+
+# plot a histogram and the quantiles of body mass to identify extreme outliers
+hist(CWM_shift$body_mass_median)
+quantile(CWM_shift$body_mass_median, c(.001, .999))
+quantile(CWM_shift$bm_overlap, c(.001, .999), na.rm = T)
+
+ggplot() +
+    theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = body_mass_median), data = CWM_shift) + 
+  scale_color_viridis(option = "D", limits = c(1.7, 3.18),
+  guide = guide_colorbar (barheight = unit(4, units = "mm"), 
+                          barwidth = unit(70, units = "mm"),
+                          label.theme = element_text(angle = 270))) +
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom", legend.box = "vertical", legend.title = element_blank())+
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(),)+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ggsave("extremes_BodyMass.png")
+
+# Generation Length
+
+# plot a histogram and the quantiles of Generation length to identify extreme outliers
+hist(CWM_shift$GL)
+quantile(CWM_shift$GL, c(.001, .999))
+quantile(CWM_shift$GL_overlap, c(.001, .999), na.rm = T)
+
+ggplot() +
+     theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = GL), data = CWM_shift) + 
+  scale_color_viridis(option = "D",limits = c(0.97, 1.34),
+  guide = guide_colorbar (barheight = unit(4, units = "mm"), 
+                          barwidth = unit(70, units = "mm"),
+                          label.theme = element_text(angle = 270))) +
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom", legend.box = "vertical", legend.title = element_blank())+
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(),)+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ggsave("extreme_GL.png")
+
+
+## shift in CWM
+
+# Clutch Size (-BYCATCH SP)
+ggplot() +
+    theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = clutch_overlap), data = CWM_shift) + 
+  scale_color_viridis(option = "D",  limits = c(1, 3),
+  guide = guide_colorbar (barheight = unit(4, units = "mm"), 
+                          barwidth = unit(70, units = "mm"),
+                          label.theme = element_text(angle = 270))) +
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom", legend.box = "vertical", legend.title = element_blank())+
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(),)+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ ggsave("extreme_clutch_overlap.png")
+
+
+
+# Body Mass (-BYCATCH SP)
+ggplot() +   
+    theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = bm_overlap), data = CWM_shift) + 
+  scale_color_viridis(option = "D", limits = c(1.7, 3.18), 
+  guide = guide_colorbar (barheight = unit(4, units = "mm"), 
+                          barwidth = unit(70, units = "mm"),
+                          label.theme = element_text(angle = 270))) +
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom", legend.box = "vertical", legend.title = element_blank())+
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(),)+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ ggsave("extremes_bodymass_overlap.png")
+ 
+ 
+
+# Generation Length (-BYCATCH SP) 
+ ggplot() +
+    theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = GL_overlap), data = CWM_shift) + 
+  scale_color_viridis(option = "D", limits = c(0.97, 1.34), 
+  guide = guide_colorbar (barheight = unit(4, units = "mm"), 
+                          barwidth = unit(70, units = "mm"),
+                          label.theme = element_text(angle = 270))) +
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom", legend.box = "vertical", legend.title = element_blank())+
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(),)+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+ 
+ ggsave("extreme_GL_overlap.png")
+ 
+ 
+ 
+ 
+ 
+ ### CATAGORICAL ###
+
+# Foraging Guild
+ggplot() +
+     theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = foraging_guild), data = CWM_shift) + 
+    guides(colour = guide_legend(override.aes = list(size=5)))+
+  scale_color_manual(values = c( "#481567FF","#95D840FF","#20A387FF" , "#33638DFF"))+ 
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom")+
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(), legend.title = element_blank())+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ggsave("foraging.png")
+
+# Foraging Guild - BYCATCH
+ggplot() +
+     theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = foraging_overlap), data = CWM_shift) + 
+  guides(colour = guide_legend(override.aes = list(size=5)))+
+  scale_color_manual(values = c( "#481567FF","#95D840FF","#20A387FF" , "#33638DFF"))+ 
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom")+
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(), legend.title = element_blank())+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ ggsave("foraging_overlap.png")
+
+ 
+ 
+ 
+ # DIET
+ggplot() +
+     theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = diet_5cat), data = CWM_shift) + 
+    guides(colour = guide_legend(override.aes = list(size=5)))+
+  scale_color_manual(values = c("#33638DFF","#20A387FF","#95D840FF"))+ 
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom")+
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(), legend.title = element_blank())+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+
+ggsave("diet.png")
+
+# DIET - BYCATCH
+ggplot() +
+     theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = diet_5cat_overlap), data = CWM_shift) + 
+  guides(colour = guide_legend(override.aes = list(size=5)))+
+  scale_color_manual(values = c("#33638DFF","#20A387FF","#95D840FF"))+ 
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom")+
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(), legend.title = element_blank())+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ ggsave("diet_overlap.png")
+ 
+```
+
+
+
+
+## JAN 14th - CWM global map - origional data
+```{r}
+
+library(ggplot2);library(viridis); library(ggpubr); library(tidyverse); 
+library(sf);library("rnaturalearth"); library("rnaturalearthdata")
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# FULL ORIGIONAL DATA SCALE
+
+### CONTINUOUS ###
+
+# Clutch Size
+ggplot() +
+  theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = clutch), data = CWM_shift) + 
+  scale_color_viridis(option = "D", limits = c(1, 3),
+  guide = guide_colorbar (title.position = 'top', title.hjust = 0.5, label.hjust = 0.5,
+  barheight = unit(3, units = "mm"), barwidth = unit(100, units = "mm"))) +
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom", legend.box = "vertical")+
+  labs(colour = "Clutch Size") + 
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank())+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ggsave("Clutch.png")
+
+# Body Mass
+ggplot() +
+    theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = body_mass_median), data = CWM_shift) + 
+  scale_color_viridis(option = "D", limits = c(1.4, 4.5),
+  guide = guide_colorbar(title.position = 'top', title.hjust = 0.5, label.hjust = 0.5,
+  barheight = unit(3, units = "mm"), barwidth = unit(100, units = "mm"))) +
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom", legend.box = "vertical")+
+  labs(colour = "Body Mass") + 
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank())+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ggsave("BodyMass.png")
+
+# Generation Length
+ggplot() +
+     theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = GL), data = CWM_shift) + 
+  scale_color_viridis(option = "D",limits = c(0.88, 1.49),
+  guide = guide_colorbar (title.position = 'top', title.hjust = 0.5, label.hjust = 0.5,
+  barheight = unit(3, units = "mm"), barwidth = unit(100, units = "mm"))) +
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom", legend.box = "vertical")+
+  labs(colour = "Generation Length") + 
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank())+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ggsave("GL.png")
+
+
+## shift in CWM
+
+# Clutch Size (-BYCATCH SP)
+ggplot() +
+    theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = clutch_overlap), data = CWM_shift) + 
+  scale_color_viridis(option = "D",  limits = c(1, 3),
+  guide = guide_colorbar(title.position = 'top', title.hjust = 0.5, label.hjust = 0.5,
+  barheight = unit(3, units = "mm"), barwidth = unit(100, units = "mm"))) +
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom", legend.box = "vertical")+
+  labs(colour = "Clutch Size - Bycatch Extinction") + 
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank())+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ ggsave("clutch_overlap.png")
+
+
+
+# Body Mass (-BYCATCH SP)
+ggplot() +
+    theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = bm_overlap), data = CWM_shift) + 
+  scale_color_viridis(option = "D", limits = c(1.4, 4.5),
+  guide = guide_colorbar(title.position = 'top', title.hjust = 0.5, label.hjust = 0.5,
+  barheight = unit(3, units = "mm"), barwidth = unit(100, units = "mm"))) +
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom", legend.box = "vertical")+
+  labs(colour = "Body Mass - Bycatch Extinction") + 
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank())+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ ggsave("bodymass_overlap.png")
+ 
+ 
+
+# Generation Length (-BYCATCH SP) 
+ ggplot() +
+    theme_bw(base_size = 18)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(aes(x = Long, y = Lat, colour = GL_overlap), data = CWM_shift) + 
+  scale_color_viridis(option = "D",  limits = c(0.88, 1.49),
+  guide = guide_colorbar (title.position = 'top', title.hjust = 0.5, label.hjust = 0.5,
+  barheight = unit(3, units = "mm"), barwidth = unit(100, units = "mm"))) +
+  scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
+  scale_x_continuous(expand = c(0,0), limits = c(-180, 180))+
+  theme(legend.position = "bottom", legend.box = "vertical")+
+  labs(colour = "Generation Length - Bycatch Extinction") + 
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank())+
+    geom_sf(data = world, fill = "grey60", colour = "grey20", size = 0.25)
+
+ ggsave("GL_overlap.png")
+
+
+
+
+```
+
 
 
 
