@@ -727,241 +727,6 @@ CWM_shift$ID <- NULL
 saveRDS(CWM_shift, "CWM_shift.rds")
 ```
 
-### *Plot the shift in CONTINUOUS traits*
-
-```{r}
-library(ggplot2);library(ggdist); library(tidyverse)
-
-## Calculate the sd to summarise the shifts
-stdev <- CWM_shift %>% group_by(ocean) %>% summarise(`Generation Length` = sd(GL_diff, na.rm = T),
-                                                     `Clutch Size` = sd(clutch_diff, na.rm = T),
-                                                     `Body Mass` = sd(bm_diff, na.rm = T),
-                                                     `Surface Forager`= sd(surface_diff, na.rm = T),
-                                                     `Diving Forager`= sd(diver_diff, na.rm = T),
-                                                     `Generalist Forager`= sd(general_diff, na.rm = T),
-                                                     `Ground Forager`= sd(ground_diff, na.rm = T))
-
-## Calculate the means to summarise the shifts
-means <- CWM_shift %>% group_by(ocean) %>% summarise(`Generation Length` = mean(GL_diff, na.rm = T),
-                                                     `Clutch Size` = mean(clutch_diff, na.rm = T),
-                                                     `Body Mass` = mean(bm_diff, na.rm = T),
-                                                     `Surface Forager`= mean(surface_diff, na.rm = T),
-                                                     `Diving Forager`= mean(diver_diff, na.rm = T),
-                                                     `Generalist Forager`= mean(general_diff, na.rm = T),
-                                                     `Ground Forager`= mean(ground_diff, na.rm = T))
-
-# Gather
-means2 <- means %>% gather(value = "Mean", key = "Trait", `Generation Length`:`Ground Forager`)
-stdev2 <- stdev %>% gather(value = "SD", key = "Trait", `Generation Length`:`Ground Forager`)
-
-## Join together
-means <- left_join(means2, stdev2)
-
-## For the SD plotting in ggplot, if the means are positive, need to make negative
-pos <- means %>% filter(Mean > 0)
-pos$SD <- pos$SD*-1
-neg <- means %>% filter(Mean < 0)
-means <- rbind(neg, pos)
-
-## Assign colour category
-means$colour <- ifelse(means$Mean < 0, "negative","positive")
-
-## Assign Levels to the data to order the plot
-means$ocean = factor(means$ocean, levels=c("Arctic Ocean", "North Atlantic Ocean",
-                                           "South Atlantic Ocean", "North Pacific Ocean",
-                                           "South Pacific Ocean", "Baltic Sea",
-                                           "Mediterranean Region", 
-                                           "South China and Easter Archipelagic Seas",
-                                           "Indian Ocean", "Southern Ocean"))
-
-## Rename "South China and Easter Archipelagic Seas", 
-means$ocean <- recode(means$ocean, `South China and Easter Archipelagic Seas` = "South China Sea")
-
-
-## Set the theme
-plottheme <-  theme_bw(base_size = 15)+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(axis.title.y = element_text(vjust = 3)) +
-  theme(axis.title.x = element_text(vjust = -1))+
-  theme(strip.text.x = element_text(size = 15, color = "white", face = "bold"), 
-          strip.background = element_rect(fill="black"))+
-  theme(legend.position = "none")
-
-# plot
-ggplot(data = means, aes(x = ocean, y = Mean)) +
-  scale_x_discrete(limits=rev)+
-  geom_bar(stat="identity", color="black", aes(fill = colour))+
-  geom_errorbar(aes(x=ocean, ymin = Mean, ymax=Mean-SD), width=0.4, alpha=0.9) +
-    geom_hline(yintercept = 0,  size = 0.4)+
-   scale_fill_manual(values=c(positive="#FF8E00",negative="#003F7D"))+
-   coord_flip() +
-  facet_wrap(~Trait, scales = "free_x")+ 
-  plottheme+
-  labs(x = "", y = "Deviation in CWM (%)")
-
-
-```
-
-### Violin plot
-```{r}
-
-
-
-
-ggplot(data = CWM_shift, aes(x = GL_diff, y = ocean)) +
-  stat_halfeye()
-
-ggplot(data = CWM_shift, aes(x = ocean, y = GL_diff)) +
-  geom_violin(position = position_nudge(x = 0.2, y = 0), alpha = 0.8) +
-  coord_flip() +
-   scale_y_continuous(limits = c(-21, 5.6))
-
-ggplot(data = CWM_shift, aes(x = ocean, y = clutch_diff)) +
-  geom_violin( alpha = 0.8) +
-  coord_flip() +
-  theme_bw()+
-  scale_y_continuous(limits = c(-25, 55))
-
-ggplot(data = CWM_shift, aes(x = ocean, y = bm_diff)) +
-  geom_violin(position = position_nudge(x = 0.2, y = 0), alpha = 0.8) +
-  coord_flip() +
-  scale_y_continuous(limits = c(-39, 12))
-
-ggplot(data = CWM_shift, aes(x = ocean, y = GL_diff)) +
-  geom_boxplot() +
-  coord_flip() 
-```
-
-
-
-### *Plot the shift in CONTINUOUS traits with GAMM and qGAM*
-
-```{r}
-library(mgcv); library(tidymv); library(EnvStats);library(ggplot2);library(qgam); library(MASS)
-
-### GENERATION LENGTH ###
-
-# build model
-m_GL <- qgam(GL_diff~s(Lat, k=12), qu = 0.2, data = CWM_shift)
-
-# returns a tibble with the predictions from all the terms in a gam model
-m_GL_p <- predict_gam(m_GL)
-
-# Identify extreme values to determine where to crop the figure
-quantile(CWM_shift$GL_diff, c(.001, .999), na.rm = T)
-
-# Add a heading with facet wrap
-CWM_shift$gl <- "Generation Length"
-
-gl <- ggplot(CWM_shift)+
-  geom_point(aes(Lat, GL_diff), colour = "#56B4E9", shape = 1, alpha = 1/10, size = 2)+
-  #geom_line(aes(Lat, fit), data = m_GL_p, colour = "black", size = 1)+
-  coord_flip()+
-  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
-  theme_bw(base_size = 20)+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(legend.position = "none") +
-  labs(x = "", y = "Deviation in CWM (%)")+
- # ggtitle("Generation Length")+
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
-  scale_y_continuous(limits = c(-21, 5.6))+
-  scale_x_continuous(breaks = seq(-50, 50, 50),
-                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
-   facet_wrap(~gl)+
-  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
-          strip.background = element_rect(fill="black"))
-
-  
-ggsave("GL_shift.png")
-
-
-
-
-### CLUTCH ###    
-
-# build model
-m_clutch <- gamm(clutch_diff~s(Lat), data = CWM_shift, method = "REML")
-
-# returns a tibble with the predictions from all the terms in a gam model
-m_clutch_p <- predict_gam(m_clutch$gam)
-
-# Identify extreme values to determine where to crop the figure
-quantile(CWM_shift$clutch_diff, c(.001, .999), na.rm = T)
-
-# Add a heading with facet wrap
-CWM_shift$cl <- "Clutch Size"
-
-cl <- ggplot(CWM_shift)+
-  geom_point(aes(Lat, clutch_diff), colour =  "#E69F00", shape = 1, alpha = 1/10, size = 2)+
-  geom_line(aes(Lat, fit), data = m_clutch_p, colour = "black", size = 1)+
-  coord_flip()+
-  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
-  theme_bw(base_size = 20)+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(legend.position = "none") +
-  labs(x = "Latitude", y = "Deviation in CWM (%)")+
-  #ggtitle("Clutch Size")+
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
-  scale_y_continuous(limits = c(-25, 55))+
-  scale_x_continuous(breaks = seq(-50, 50, 50),
-                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
-   facet_wrap(~cl)+
-  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
-          strip.background = element_rect(fill="black"))
-  
-ggsave("clutch_shift.png")
-  
-  
-  
-### BODY MASS ###    
-
-
-# build model
-m_bm <- qgam(bm_diff~s(Lat, k=12), qu = 0.2, data = CWM_shift)
-
-# returns a tibble with the predictions from all the terms in a gam model
-m_bm_p <- predict_gam(m_bm)
-
-# Identify extreme values to determine where to crop the figure
-quantile(CWM_shift$bm_diff, c(.001, .999), na.rm = T)
-
-# Add a heading with facet wrap
-CWM_shift$bm <- "Body Mass"
-
-bm <- ggplot(CWM_shift)+
-  geom_point(aes(Lat, bm_diff), colour =  "#56B4E9", shape = 1, alpha = 1/10, size = 2)+
-  geom_line(aes(Lat, fit), data = m_bm_p, colour = "black", size = 1)+
-  coord_flip()+
-  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
-  theme_bw(base_size = 20)+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(legend.position = "none") +
-  labs(x = "", y = "Deviation in CWM (%)")+
-  #ggtitle("Body Mass")+
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
- scale_y_continuous(limits = c(-39, 12))+
- scale_x_continuous(breaks = seq(-50, 50, 50),
-                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
-  facet_wrap(~bm)+
-  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
-          strip.background = element_rect(fill="black"))
-  
-
-ggsave("bodymass_shift.png")
-
-
-
-
-
-# MAKE A PANEL PLOT 
-ggarrange(cl,bm, gl, nrow = 1, ncol = 3, labels = c("A", "B", "C"), 
-          font.label = list(size = 20, color = "black", face ="bold"))
-
-ggsave("continuous.png", dpi = 300, width = 21, height = 7)
-
-```
-
-
 
 ### *Calculate the shift in foraging guild (CATEGORICAL)*
 
@@ -1123,161 +888,6 @@ CWM_shift <- left_join(CWM_shift, forage_diff)
 ```
 
 
-### *Plot the shift in foraging guild (CATEGORICAL) with GAMM*
-```{r}
-
-### SURFACE FORAGER ###
-
-# build model
-m_surface <- gamm(surface_diff~s(Lat), data = forage_diff)
-
-# returns a tibble with the predictions from all the terms in a gam model
-m_surface_p <- predict_gam(m_surface$gam)
-
-# Identify extreme values to determine where to crop the figure
-quantile(forage_diff$surface_diff, c(.01, .99), na.rm = T)
-
-
-forage_diff$surf <- "Surface Forager"
-
-p1<-ggplot(forage_diff)+
-  geom_point(aes(Lat, surface_diff), colour = "#E69F00", shape = 1, alpha = 1/10, size = 2)+
-  #geom_line(aes(Lat, fit), data = m_surface_p, colour = "black", size = 1)+
-  coord_flip()+
-  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
-  theme_bw(base_size = 20)+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(legend.position = "none") +
-  labs(x = "Latitude", y = "Deviation in CWM (%)")+
-  #ggtitle("Surface Forager")+
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
- scale_y_continuous(limits = c(-50, 60))+
-  scale_x_continuous(breaks = seq(-50, 50, 50),
-                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
-  facet_wrap(~surf)+
-  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
-          strip.background = element_rect(fill="black"))
-  
-ggsave("Surface_shift.png")
-
-
-
-### DIVER ###
-
-# build model
-m_diver <- gamm(diver_diff~s(Lat), data = forage_diff)
-
-# returns a tibble with the predictions from all the terms in a gam model
-m_diver_p <- predict_gam(m_diver$gam)
-
-# Identify extreme values to determine where to crop the figure
-quantile(forage_diff$diver_diff, c(.01, .99), na.rm = T)
-
-forage_diff$div <- "Diving Forager"
-
-p2<- ggplot(forage_diff)+
-  geom_point(aes(Lat, diver_diff), colour = "#56B4E9", shape = 1, alpha = 1/10, size = 2)+
-  #geom_line(aes(Lat, fit), data = m_diver_p, colour = "black", size = 1)+
-  coord_flip()+
-  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
-  theme_bw(base_size = 20)+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(legend.position = "none") +
-  labs(x = "", y = "Deviation in CWM (%)")+
-  #ggtitle("Diving Forager")+
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
-  scale_y_continuous(limits = c(-57, 36))+
-  scale_x_continuous(breaks = seq(-50, 50, 50),
-                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
-    facet_wrap(~div)+
-  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
-          strip.background = element_rect(fill="black"))
-  
-ggsave("Diver_shift.png")
-
-
-
-### GENERALIST ###
-
-# build model
-m_general <- gamm(general_diff~s(Lat), data = forage_diff)
-
-# returns a tibble with the predictions from all the terms in a gam model
-m_general_p <- predict_gam(m_general$gam)
-
-
-# Identify extreme values to determine where to crop the figure
-quantile(forage_diff$general_diff, c(.01, .99), na.rm = T)
-
-forage_diff$gen <- "Generalist Forager"
-
-p3<- ggplot(forage_diff)+
-  geom_point(aes(Lat, general_diff), colour = "#56B4E9", shape = 1, alpha = 1/10, size = 2)+
-  geom_line(aes(Lat, fit), data = m_general_p, colour = "black", size = 1)+
-  coord_flip()+
-  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
-  theme_bw(base_size = 20)+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(legend.position = "none") +
-  labs(x = "", y = "Deviation in CWM (%)")+
-  #ggtitle("Generalist Forager")+
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
-  scale_y_continuous(limits = c(-30, 37))+
-  scale_x_continuous(breaks = seq(-50, 50, 50),
-                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
-  facet_wrap(~gen)+
-  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
-          strip.background = element_rect(fill="black"))
-  
-ggsave("Generalist_shift.png")
-
-
-### GROUND ###
-
-# build model
-m_ground <- gamm(ground_diff~s(Lat), data = forage_diff)
-
-# returns a tibble with the predictions from all the terms in a gam model
-m_ground_p <- predict_gam(m_ground$gam)
-
-
-# Identify extreme values to determine where to crop the figure
-quantile(forage_diff$ground_diff, c(.01, .99), na.rm = T) # before = -35 & 32
-
-forage_diff$gr <- "Ground Forager"
-
-p4<- ggplot(forage_diff)+
-  geom_point(aes(Lat, ground_diff), colour = "#E69F00", shape = 1, alpha = 1/10, size = 2)+
-  geom_line(aes(Lat, fit), data = m_ground_p, colour = "black", size = 1)+
-  coord_flip()+
-  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
-  theme_bw(base_size = 20)+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(legend.position = "none") +
-  labs(x = "Latitude", y = "Deviation in CWM (%)")+
-  #ggtitle("Ground Forager")+
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
-  scale_y_continuous(limits = c(-13, 75))+
-  scale_x_continuous(breaks = seq(-50, 50, 50),
-                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
-  facet_wrap(~gr)+
-  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
-          strip.background = element_rect(fill="black"))
-  
-ggsave("Ground_shift.png")
-
-
-
-ggarrange(p1, p2, p3, p4, 
-          nrow = 2, ncol = 2, 
-          labels = c("A", "B", "C", "D"), 
-          font.label = list(size = 20, color = "black", face ="bold"))
-
-ggsave("mix2.png", dpi = 300, width = 14, height = 14)
-
-```
-
-
 ### *Calculate the shift in diet guild (CATEGORICAL)*
 
 ```{r message=FALSE, error=FALSE, warning=FALSE}
@@ -1358,7 +968,7 @@ PAM_omniv_NT$freq <- rowSums(PAM_omniv_NT)
 diet_full <- cbind(dplyr::select(CWM_all, Lat, Long),
                      PAM_vert$freq, PAM_invert$freq,PAM_omniv$freq)
 
-diet_overlap <- cbind(dplyr::select(CWM_overlap, Lat, Long),
+diet_overlap <- cbind(dplyr::select(CWM_all, Lat, Long),
                         PAM_vert_NT$freq, PAM_invert_NT$freq,PAM_omniv_NT$freq)
 
 diet_diff <- left_join(diet_full, diet_overlap, by = c("Lat", "Long"))
@@ -1412,6 +1022,14 @@ diet_diff$invert_diff <- diet_diff$invert_NT_prop - diet_diff$invert_prop
 diet_diff$omnivore_diff <- diet_diff$omnivore_NT_prop - diet_diff$omnivore_prop
 
 
+## Join to the CWM_shift dataframe
+# Select columns
+diet_diff <- diet_diff %>% select(Lat, Long, 
+                                      vert_diff, invert_diff, omnivore_diff)
+#Join
+CWM_shift <- left_join(CWM_shift, diet_diff)
+
+
 ```
 
 
@@ -1422,135 +1040,125 @@ diet_diff$omnivore_diff <- diet_diff$omnivore_NT_prop - diet_diff$omnivore_prop
 
 
 
-### *Plot the shift in diet guild (CATEGORICAL) with GAMM*
+### *Plot the shift in CONTINUOUS traits*
+
+```{r}
+library(ggplot2);library(ggdist); library(tidyverse)
+
+## Calculate the sd to summarise the shifts
+stdev <- CWM_shift %>% group_by(ocean) %>% summarise(`Generation Length` = sd(GL_diff, na.rm = T),
+                                                     `Clutch Size` = sd(clutch_diff, na.rm = T),
+                                                     `Body Mass` = sd(bm_diff, na.rm = T),
+                                                     `Surface Forager`= sd(surface_diff, na.rm = T),
+                                                     `Diving Forager`= sd(diver_diff, na.rm = T),
+                                                     `Generalist Forager`= sd(vert_diff, na.rm = T),
+                                                     `Ground Forager`= sd(ground_diff, na.rm = T),
+                                                     `Vertebrate & Scavenger Diet`= sd(diver_diff, na.rm = T),
+                                                     `Invertebrate Diet`= sd(invert_diff, na.rm = T),
+                                                     `Omnivore Diet`= sd(omnivore_diff, na.rm = T))
+
+## Calculate the means to summarise the shifts
+means <- CWM_shift %>% group_by(ocean) %>% summarise(`Generation Length` = mean(GL_diff, na.rm = T),
+                                                     `Clutch Size` = mean(clutch_diff, na.rm = T),
+                                                     `Body Mass` = mean(bm_diff, na.rm = T),
+                                                     `Surface Forager`= mean(surface_diff, na.rm = T),
+                                                     `Diving Forager`= mean(diver_diff, na.rm = T),
+                                                     `Generalist Forager`= mean(general_diff, na.rm = T),
+                                                     `Ground Forager`= mean(ground_diff, na.rm = T),
+                                                     `Vertebrate & Scavenger Diet`= mean(diver_diff, na.rm = T),
+                                                     `Invertebrate Diet`= mean(invert_diff, na.rm = T),
+                                                     `Omnivore Diet`= mean(omnivore_diff, na.rm = T))
+
+# Gather
+means2 <- means %>% gather(value = "Mean", key = "Trait", `Generation Length`:`Omnivore Diet`)
+stdev2 <- stdev %>% gather(value = "SD", key = "Trait", `Generation Length`:`Omnivore Diet`)
+
+## Join together
+means <- left_join(means2, stdev2)
+
+## For the SD plotting in ggplot, if the means are positive, need to make negative
+pos <- means %>% filter(Mean > 0)
+pos$SD <- pos$SD*-1
+neg <- means %>% filter(Mean < 0)
+means <- rbind(neg, pos)
+
+## Assign colour category
+means$colour <- ifelse(means$Mean < 0, "negative","positive")
+
+## Assign Levels to the ocean data to order the plot
+means$ocean = factor(means$ocean, levels=c("Arctic Ocean", "North Atlantic Ocean",
+                                           "South Atlantic Ocean", "North Pacific Ocean",
+                                           "South Pacific Ocean", "Baltic Sea",
+                                           "Mediterranean Region", 
+                                           "South China and Easter Archipelagic Seas",
+                                           "Indian Ocean", "Southern Ocean"))
+
+## Rename "South China and Easter Archipelagic Seas", 
+means$ocean <- recode(means$ocean, `South China and Easter Archipelagic Seas` = "South China Sea")
+
+## Assign Levels to the trait data to order the plot
+means$Trait = factor(means$Trait, levels=c("Body Mass", "Generation Length",
+                                           "Clutch Size", "Vertebrate & Scavenger Diet",
+                                           "Invertebrate Diet","Omnivore Diet",
+                                           "Surface Forager","Diving Forager",
+                                           "Generalist Forager","Ground Forager"))
+
+
+
+## Set the theme
+plottheme <-  theme_bw(base_size = 15)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(axis.title.y = element_text(vjust = 3)) +
+  theme(axis.title.x = element_text(vjust = -1))+
+  theme(strip.text.x = element_text(size = 15, color = "white", face = "bold"), 
+          strip.background = element_rect(fill="black"))+
+  theme(legend.position = "none")
+
+# plot
+ggplot(data = means, aes(x = ocean, y = Mean)) +
+  scale_x_discrete(limits=rev)+
+  geom_bar(stat="identity", color="black", aes(fill = colour))+
+  geom_errorbar(aes(x=ocean, ymin = Mean, ymax=Mean-SD), width=0.4, alpha=0.9) +
+    geom_hline(yintercept = 0,  size = 0.4)+
+   scale_fill_manual(values=c(positive="#FF8E00",negative="#003F7D"))+
+   coord_flip() +
+  facet_wrap(~Trait, scales = "free_x", ncol = 4, nrow = 3)+ 
+  plottheme+
+  labs(x = "", y = "Mean Deviation in CWM (%)")
+
+
+```
+
+### Violin plot
 ```{r}
 
-### VERTEBRATE FORAGER ###
-
-# build model
-m_vert <- gamm(vert_diff~s(Lat), data = diet_diff)
-
-# returns a tibble with the predictions from all the terms in a gam model
-m_vert_p <- predict_gam(m_vert$gam)
-
-# Identify extreme values to determine where to crop the figure
-quantile(diet_diff$vert_diff, c(.01, .99), na.rm = T)
-
-
-diet_diff$vertebrate <- "Vertebrate & Scavenger Diet"
-
-vertebrates<-ggplot(diet_diff)+
-  geom_point(aes(Lat, vert_diff), colour = "#E69F00", shape = 1, alpha = 1/10, size = 2)+
-  geom_line(aes(Lat, fit), data = m_vert_p, colour = "black", size = 1)+
-  coord_flip()+
-  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
-  theme_bw(base_size = 20)+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(legend.position = "none") +
-  labs(x = "Latitude", y = "Deviation in CWM (%)")+
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
- #scale_y_continuous(limits = c(-50, 60))+
-  scale_x_continuous(breaks = seq(-50, 50, 50),
-                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
-  facet_wrap(~vertebrate)+
-  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
-          strip.background = element_rect(fill="black"))
-  
-ggsave("vertebrate_shift.png")
 
 
 
-### INVERTEBRATES ###
+ggplot(data = CWM_shift, aes(x = GL_diff, y = ocean)) +
+  stat_halfeye()
 
-# build model
-m_invert <- gamm(invert_diff~s(Lat), data = diet_diff)
+ggplot(data = CWM_shift, aes(x = ocean, y = GL_diff)) +
+  geom_violin(position = position_nudge(x = 0.2, y = 0), alpha = 0.8) +
+  coord_flip() +
+   scale_y_continuous(limits = c(-21, 5.6))
 
-# returns a tibble with the predictions from all the terms in a gam model
-m_invert_p <- predict_gam(m_invert$gam)
+ggplot(data = CWM_shift, aes(x = ocean, y = clutch_diff)) +
+  geom_violin( alpha = 0.8) +
+  coord_flip() +
+  theme_bw()+
+  scale_y_continuous(limits = c(-25, 55))
 
-# Identify extreme values to determine where to crop the figure
-quantile(diet_diff$invert_diff, c(.01, .99), na.rm = T)
+ggplot(data = CWM_shift, aes(x = ocean, y = bm_diff)) +
+  geom_violin(position = position_nudge(x = 0.2, y = 0), alpha = 0.8) +
+  coord_flip() +
+  scale_y_continuous(limits = c(-39, 12))
 
-diet_diff$invertebrate <- "Invertebrate Diet"
-
-inverts<- ggplot(diet_diff)+
-  geom_point(aes(Lat, invert_diff), colour = "#56B4E9", shape = 1, alpha = 1/10, size = 2)+
-  geom_line(aes(Lat, fit), data = m_invert_p, colour = "black", size = 1)+
-  coord_flip()+
-  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
-  theme_bw(base_size = 20)+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(legend.position = "none") +
-  labs(x = "", y = "Deviation in CWM (%)")+
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
-  #scale_y_continuous(limits = c(-57, 36))+
-  scale_x_continuous(breaks = seq(-50, 50, 50),
-                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
-    facet_wrap(~invertebrate)+
-  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
-          strip.background = element_rect(fill="black"))
-  
-ggsave("invertebrate_shift.png")
-
-
-
-### Omnivore ###
-
-# build model
-m_omniv <- gamm(omnivore_diff~s(Lat), data = diet_diff)
-
-# returns a tibble with the predictions from all the terms in a gam model
-m_omniv_p <- predict_gam(m_omniv$gam)
-
-
-# Identify extreme values to determine where to crop the figure
-quantile(diet_diff$omnivore_diff, c(.01, .99), na.rm = T)
-
-diet_diff$omnivores <- "Omnivore Diet"
-
-Omnivores<- ggplot(diet_diff)+
-  geom_point(aes(Lat, omnivore_diff), colour = "#56B4E9", shape = 1, alpha = 1/10, size = 2)+
-  geom_line(aes(Lat, fit), data = m_omniv_p, colour = "black", size = 1)+
-  coord_flip()+
-  geom_hline(yintercept = 0, linetype="dashed", size = 1)+
-  theme_bw(base_size = 20)+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(legend.position = "none") +
-  labs(x = "", y = "Deviation in CWM (%)")+
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
-  scale_y_continuous(limits = c(-30, 37))+
-  scale_x_continuous(breaks = seq(-50, 50, 50),
-                     labels = c(expression(50*degree*S), expression(0*degree*""), expression(50*degree*N)))+
-  facet_wrap(~omnivores)+
-  theme(strip.text.x = element_text(size = 22, color = "white", face = "bold"), 
-          strip.background = element_rect(fill="black"))
-  
-ggsave("omnivore_shift.png")
-
-
-
-
-ggarrange(vertebrates, inverts, Omnivores,
-          nrow = 1, ncol = 3, 
-          labels = c("A", "B", "C"), 
-          font.label = list(size = 20, color = "black", face ="bold"))
-
-ggsave("diet.png", dpi = 300, width = 21, height = 7)
-
-
-
-ggarrange(cl, bm, gl,
-          vertebrates, inverts, Omnivores,
-          p1,p2,p3,p4,
-          nrow = 4, ncol = 3, 
-          labels = c("A", "B", "C",
-                     "D", "E", "F",
-                     "G","H","I","J"), 
-          font.label = list(size = 20, color = "black", face ="bold"))
-
-
-ggsave("allShifts.png", dpi = 300, width = 21, height = 25)
+ggplot(data = CWM_shift, aes(x = ocean, y = GL_diff)) +
+  geom_boxplot() +
+  coord_flip() 
 ```
+
 
 
 
