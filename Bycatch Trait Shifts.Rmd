@@ -1160,7 +1160,7 @@ ggplot(data = CWM_shift, aes(x = ocean, y = GL_diff)) +
 
 
 
-## JAN 14th - CWM global map - EXTREMES REMOVED
+## CWM global map - EXTREMES REMOVED
 ```{r}
 
 library(ggplot2);library(viridis); library(ggpubr); library(tidyverse); 
@@ -1377,7 +1377,7 @@ ggplot() +
 
 
 
-## JAN 14th - CWM global map - origional data
+## CWM global map - origional data
 ```{r}
 
 library(ggplot2);library(viridis); library(ggpubr); library(tidyverse); 
@@ -1394,7 +1394,7 @@ ggplot() +
   theme_bw(base_size = 18)+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
   geom_point(aes(x = Long, y = Lat, colour = clutch), data = CWM_shift) + 
-  scale_color_viridis(option = "D", limits = c(1, 3),
+  scale_color_viridis(option = "D", limits = c(1, 9.4),
   guide = guide_colorbar (title.position = 'top', title.hjust = 0.5, label.hjust = 0.5,
   barheight = unit(3, units = "mm"), barwidth = unit(100, units = "mm"))) +
   scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
@@ -1428,7 +1428,7 @@ ggplot() +
      theme_bw(base_size = 18)+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
   geom_point(aes(x = Long, y = Lat, colour = GL), data = CWM_shift) + 
-  scale_color_viridis(option = "D",limits = c(0.88, 1.49),
+  scale_color_viridis(option = "D",limits = c(0.84, 1.49),
   guide = guide_colorbar (title.position = 'top', title.hjust = 0.5, label.hjust = 0.5,
   barheight = unit(3, units = "mm"), barwidth = unit(100, units = "mm"))) +
   scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
@@ -1448,7 +1448,7 @@ ggplot() +
     theme_bw(base_size = 18)+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
   geom_point(aes(x = Long, y = Lat, colour = clutch_overlap), data = CWM_shift) + 
-  scale_color_viridis(option = "D",  limits = c(1, 3),
+  scale_color_viridis(option = "D",  limits = c(1, 9.4),
   guide = guide_colorbar(title.position = 'top', title.hjust = 0.5, label.hjust = 0.5,
   barheight = unit(3, units = "mm"), barwidth = unit(100, units = "mm"))) +
   scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
@@ -1486,7 +1486,7 @@ ggplot() +
     theme_bw(base_size = 18)+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
   geom_point(aes(x = Long, y = Lat, colour = GL_overlap), data = CWM_shift) + 
-  scale_color_viridis(option = "D",  limits = c(0.88, 1.49),
+  scale_color_viridis(option = "D",  limits = c(0.84, 1.49),
   guide = guide_colorbar (title.position = 'top', title.hjust = 0.5, label.hjust = 0.5,
   barheight = unit(3, units = "mm"), barwidth = unit(100, units = "mm"))) +
   scale_y_continuous(expand = c(0,0), limits = c(-84, 85))+
