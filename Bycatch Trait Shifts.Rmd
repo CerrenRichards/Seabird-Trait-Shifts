@@ -550,7 +550,7 @@ ggsave("fishing_vessels.png")
 ## **5. Calculate the Community Weighted Mean (CWM) metric**
 ### *Observed CWM*
 
-Run this with all the species present (n = 341). 
+Run this with all the species present (n = 361). 
 
 ```{r message=FALSE, error=FALSE, warning=FALSE}
 library(FD)
@@ -1124,6 +1124,50 @@ ggplot(data = means, aes(x = ocean, y = Mean)) +
 # Save
 ggsave("allShifts.png", dpi = 300, width = 15, height = 10)
 ```
+
+## One-Sample Wilcoxon Signed Rank Test 
+
+To test whether the shifts in community weighted mean are significantly different from zero in each marine region.
+
+```{r}
+
+library(rstatix)
+
+## Gather the shift data so that it can be run through a pipe
+test <- CWM_shift %>% select(ocean, GL_diff, clutch_diff, 
+                             bm_diff, surface_diff,diver_diff,
+                             vert_diff,ground_diff, general_diff,
+                             invert_diff, omnivore_diff) %>% 
+                          group_by(ocean) %>%
+                          gather(value = "Value", key = "Trait", 
+                                 GL_diff, clutch_diff, bm_diff, 
+                                 surface_diff, diver_diff,vert_diff,
+                                 ground_diff, general_diff, invert_diff, 
+                                 omnivore_diff)
+
+
+## For each ocean region and trait, test whether signif difference from zero
+res <- test %>% group_by(ocean, Trait) %>% 
+       wilcox_test(Value~1, data=., mu = 0,  alternative = "two.sided") 
+
+
+## Assign significance category to see easily
+res$sig <- ifelse(res$p < 0.05, "***","non-signif")
+
+
+
+
+res <- wilcox.test(test$ground_diff, mu = 0, alternative = "two.sided")
+
+test %>% wilcox_test(ground_diff ~ 1, mu = 0, alternative = "two.sided") 
+wilcox.test(test$ground_diff, mu = 0, alternative = "two.sided")
+
+
+test <- CWM_shift %>% filter(ocean == "Indian Ocean") %>% select(ground_diff)
+
+```
+
+
 
 ### Violin plot
 ```{r}
