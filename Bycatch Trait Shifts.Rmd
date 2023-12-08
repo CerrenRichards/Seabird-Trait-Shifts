@@ -1045,9 +1045,9 @@ stdev <- CWM_shift %>% group_by(ocean) %>% summarise(`Generation Length` = sd(GL
                                                      `Body Mass` = sd(bm_diff, na.rm = T),
                                                      `Surface Forager`= sd(surface_diff, na.rm = T),
                                                      `Diving Forager`= sd(diver_diff, na.rm = T),
-                                                     `Generalist Forager`= sd(vert_diff, na.rm = T),
+                                                     `Generalist Forager`= sd(general_diff, na.rm = T),
                                                      `Ground Forager`= sd(ground_diff, na.rm = T),
-                                                     `Vertebrate & Scavenger Diet`= sd(diver_diff, na.rm = T),
+                                                     `Vertebrate & Scavenger Diet`= sd(vert_diff, na.rm = T),
                                                      `Invertebrate Diet`= sd(invert_diff, na.rm = T),
                                                      `Omnivore Diet`= sd(omnivore_diff, na.rm = T))
 
@@ -1059,7 +1059,7 @@ means <- CWM_shift %>% group_by(ocean) %>% summarise(`Generation Length` = mean(
                                                      `Diving Forager`= mean(diver_diff, na.rm = T),
                                                      `Generalist Forager`= mean(general_diff, na.rm = T),
                                                      `Ground Forager`= mean(ground_diff, na.rm = T),
-                                                     `Vertebrate & Scavenger Diet`= mean(diver_diff, na.rm = T),
+                                                     `Vertebrate & Scavenger Diet`= mean(vert_diff, na.rm = T),
                                                      `Invertebrate Diet`= mean(invert_diff, na.rm = T),
                                                      `Omnivore Diet`= mean(omnivore_diff, na.rm = T))
 
@@ -1154,16 +1154,6 @@ res <- test %>% group_by(ocean, Trait) %>%
 ## Assign significance category to see easily
 res$sig <- ifelse(res$p < 0.05, "***","non-signif")
 
-
-
-
-res <- wilcox.test(test$ground_diff, mu = 0, alternative = "two.sided")
-
-test %>% wilcox_test(ground_diff ~ 1, mu = 0, alternative = "two.sided") 
-wilcox.test(test$ground_diff, mu = 0, alternative = "two.sided")
-
-
-test <- CWM_shift %>% filter(ocean == "Indian Ocean") %>% select(ground_diff)
 
 ```
 
