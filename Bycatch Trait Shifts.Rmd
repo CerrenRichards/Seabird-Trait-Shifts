@@ -105,30 +105,86 @@ For more information on the codes used within the distribution polygons visit: h
 
 
 ```{r message=FALSE, error=FALSE, warning=FALSE}
+
+library(sf)
+library(dplyr)
+library(sp)
+library(terra)
+library(raster)
+
+# devtools::install_version("rgeos", version = "0.6-4", repos = "http://cran.us.r-project.org")
+library(rgeos)
+
+# devtools::install_version("rgdal", version = "1.6-6", repos = "http://cran.us.r-project.org")
+library(rgdal)
+
+# devtools::install_version("maptools", version = "1.1-8", repos = "http://cran.us.r-project.org")
+library(maptools)
+
+# devtools::install_version("letsR", version = "4.0", repos = "http://cran.us.r-project.org")
 library(letsR)
 
-# .rds file that contains the subsetted seabird polygons from the large BOTW data file 
-sb <- readRDS("BOTW_seabirds_341.rds") # note this file has different binomials from the NEW_TRAITS file
+library(gdalUtilities)
+
+ensure_multipolygons <- function(X) {
+  tmp1 <- tempfile(fileext = ".gpkg")
+  tmp2 <- tempfile(fileext = ".gpkg")
+  st_write(X, tmp1)
+  ogr2ogr(tmp1, tmp2, f = "GPKG", nlt = "MULTIPOLYGON")
+  Y <- st_read(tmp2)
+  st_sf(st_drop_geometry(X), geom = st_geometry(Y))
+
+
+
+# # .rds file that contains the subsetted seabird polygons from the large BOTW data file 
+# sb <- readRDS("BOTW_seabirds_361.rds") # note this file has different binomials from the NEW_TRAITS file
+# 
+# # fix sb
+# 
+# # identify geometry column
+# sb <- dplyr::rename(sb, geometry = Shape)
+# 
+# # ensure multipolygons to prevent errors with multisurface geometries
+# sb <- ensure_multipolygons(sb)
+# 
+# # disable s2 processing
+# sf::sf_use_s2(FALSE)
+# 
+# # then try to make the sf object valid
+# sb <- st_make_valid(sb)
+# 
+# saveRDS(sb, "fixed_sb.rds")
+
+sb <- readRDS("fixed_sb.rds")
+
+sb <- readRDS("fixed_sb.rds")
 
 # Only keep the breeding season, non-breeding season and resident polygons
 # 1 = resident; 2 = breeding; 3 = non-breeding
-seabirds <- sb[sb$SEASONAL %in% c(1, 2, 3), ]
+seabirds <- sb[sb$seasonal %in% c(1, 2, 3), ]
 
 # Only keep species that are extant
 # 1 = Extant 
-seabirds <- seabirds[seabirds$PRESENCE %in% c(1), ]
+seabirds <- seabirds[seabirds$presence %in% c(1), ]
 
 # Only keep species that are native
 # 1 = Native
-seabirds <- seabirds[seabirds$ORIGIN %in% c(1), ]
+seabirds <- seabirds[seabirds$origin %in% c(1), ]
 
-# Create PAM. This take ~30-40 minutes for 341 species
+seabirds <- dplyr::rename(seabirds, sciname = sci_name)
+
+sea_spat <- as(seabirds, "Spatial")
+
+saveRDS(sea_spat, "seabirds_spatial.rds")
+
+# Create PAM. This can take ~30-40 minutes for 361 species
 # Returns latitude and longitude with PAM for each species 
 # Lat long values returned are the 1 degree cell's centroid
-PAM <- lets.presab(seabirds, resol = 1, xmn = -180, xmx = 180, ymn = -90, ymx = 90, count = TRUE)
+PAM <- letsR::lets.presab(sea_spat, resol = 1, xmn = -180, xmx = 180, ymn = -90, ymx = 90, count = TRUE)
 
 # Save PAM as a .rds file
 saveRDS(PAM, "Polygon_PAM.rds")
+
 
 ```
 
@@ -138,16 +194,14 @@ saveRDS(PAM, "Polygon_PAM.rds")
 We remove all land from the PAM because in analyses below we will be calculating ocean trait shifts, and the land obscures the pattern. 
 
 ```{r}
-library(maptools); library(dplyr) 
 
 data(wrld_simpl) # Extract polygon of the world
 
 # This crops all cells from the ocean 
-PAM_crop <- lets.pamcrop(PAM, wrld_simpl, remove.sp = TRUE)
+PAM_crop <- letsR::lets.pamcrop(PAM, wrld_simpl, remove.sp = TRUE)
 
 # Plot to see
-plot(PAM_crop, xlab = "Longitude", ylab = "Latitude",
-     col = colorRampPalette(c("darkgreen", "yellow", "blue")))
+plot(PAM_crop)
 
 # Save the PAM for the land 
 PAM_crop_df <- as.data.frame(PAM_crop[["Presence_and_Absence_Matrix"]])
@@ -156,12 +210,13 @@ PAM_crop_df <- as.data.frame(PAM_crop[["Presence_and_Absence_Matrix"]])
 PAM_df <- as.data.frame(PAM[["Presence_and_Absence_Matrix"]])
 
 # Remove the land data from the complete PAM_df
-PAM_ocean <-  anti_join(PAM_df, PAM_crop_df, by=c("Longitude(x)", "Latitude(y)"))
+PAM_ocean <-  dplyr::anti_join(PAM_df, PAM_crop_df, by=c("Longitude(x)", "Latitude(y)"))
 
 # Check whether it has successfully removed the land
 plot(PAM_ocean$`Longitude(x)`, PAM_ocean$`Latitude(y)`)
 
 saveRDS(PAM_ocean, "PAM_ocean.rds")
+
 
 ```
 
