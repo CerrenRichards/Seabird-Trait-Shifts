@@ -25,7 +25,6 @@ knitr::opts_knit$set(root.dir = '/Users/cerren/Desktop/Trait shifts - GECCO/Revi
     
 2. Preparing the Global Fishing Watch data 
     * Extract latitude and longitude for the fishing gears largely responsible for seabird bycatch
-    * Remove cells that are overlapping between fisheries and threatened species
 
 3. Importing species' threat data from the IUCN
     * Subset species at risk to bycatch
@@ -37,11 +36,16 @@ knitr::opts_knit$set(root.dir = '/Users/cerren/Desktop/Trait shifts - GECCO/Revi
     * Observed CWM
     * CWM after removing bycatch-threatened species
     * Calculate the shift in CONTINUOUS traits
-    * Plotting the shift in CONTINUOUS traits with GAM and qGAM
+    * Assign marine region for each lat long
     * Calculate the shift in foraging guild (CATEGORICAL)
-    * Plot the shift in foraging guild (CATEGORICAL) with GAMM
     * Calculate the shift in diet guild (CATEGORICAL)
-    * Plot the shift in diet guild (CATEGORICAL) with GAMM
+    
+6. Plotting
+    * Plot the shift in CONTINUOUS and CATEGORICAL traits
+    * One-sample Wilcoxon Signed Rank Test
+    * CWM global Map - EXTREMES REMOVED
+    * CWM global map - original data 
+
 
 
 #___________________________________________________________________
@@ -133,7 +137,7 @@ ensure_multipolygons <- function(X) {
   ogr2ogr(tmp1, tmp2, f = "GPKG", nlt = "MULTIPOLYGON")
   Y <- st_read(tmp2)
   st_sf(st_drop_geometry(X), geom = st_geometry(Y))
-
+}
 
 
 # # .rds file that contains the subsetted seabird polygons from the large BOTW data file 
@@ -731,7 +735,7 @@ CWM_shift$GL_diff <- ((CWM_shift$GL_overlap - CWM_shift$GL)/ CWM_shift$GL) *100
 
 
 
-### Assign marine region for each lat long
+### *Assign marine region for each lat long*
 
 Marine regions from: 
 Flanders Marine Institute (2021). Global Oceans and Seas, version 1. Available online at https://www.marineregions.org/. https://doi.org/10.14284/542.
@@ -1087,8 +1091,7 @@ CWM_shift <- left_join(CWM_shift, diet_diff)
 
 ```
 
-
-
+## **6. Plotting**
 ### *Plot the shift in CONTINUOUS and CATEGORICAL traits*
 
 ```{r}
@@ -1180,7 +1183,7 @@ ggplot(data = means, aes(x = ocean, y = Mean)) +
 ggsave("allShifts.png", dpi = 300, width = 15, height = 10)
 ```
 
-## One-Sample Wilcoxon Signed Rank Test 
+## *One-Sample Wilcoxon Signed Rank Test* 
 
 To test whether the shifts in community weighted mean are significantly different from zero in each marine region.
 
@@ -1214,42 +1217,7 @@ res$sig <- ifelse(res$p < 0.05, "***","non-signif")
 
 
 
-### Violin plot
-```{r}
-
-
-
-
-ggplot(data = CWM_shift, aes(x = GL_diff, y = ocean)) +
-  stat_halfeye()
-
-ggplot(data = CWM_shift, aes(x = ocean, y = GL_diff)) +
-  geom_violin(position = position_nudge(x = 0.2, y = 0), alpha = 0.8) +
-  coord_flip() +
-   scale_y_continuous(limits = c(-21, 5.6))
-
-ggplot(data = CWM_shift, aes(x = ocean, y = clutch_diff)) +
-  geom_violin( alpha = 0.8) +
-  coord_flip() +
-  theme_bw()+
-  scale_y_continuous(limits = c(-25, 55))
-
-ggplot(data = CWM_shift, aes(x = ocean, y = bm_diff)) +
-  geom_violin(position = position_nudge(x = 0.2, y = 0), alpha = 0.8) +
-  coord_flip() +
-  scale_y_continuous(limits = c(-39, 12))
-
-ggplot(data = CWM_shift, aes(x = ocean, y = GL_diff)) +
-  geom_boxplot() +
-  coord_flip() 
-```
-
-
-
-
-
-
-## CWM global map - EXTREMES REMOVED
+## *CWM global map - EXTREMES REMOVED*
 ```{r}
 
 library(ggplot2);library(viridis); library(ggpubr); library(tidyverse); 
@@ -1465,8 +1433,8 @@ ggplot() +
 
 
 
+## *CWM global map - original data*
 
-## CWM global map - origional data
 ```{r}
 
 library(ggplot2);library(viridis); library(ggpubr); library(tidyverse); 
